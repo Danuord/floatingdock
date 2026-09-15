@@ -1,7 +1,11 @@
-import type { DockApp } from "../domain/entities/dock-app";
+import type {
+  AppLaunchMode,
+  DockApp
+} from "../domain/entities/dock-app";
 import {
   listDockApps,
-  saveDockApp
+  saveDockApp,
+  updateDockApp
 } from "../infrastructure/storage/chrome-app-repository";
 
 import {
@@ -47,36 +51,30 @@ async function renderApps(): Promise<void> {
 
 function createAppItem(app: DockApp): HTMLLIElement {
   const item = document.createElement("li");
-  const button = document.createElement("button");
-  const label = document.createElement("span");
+  const launchButton = document.createElement("button");
+  const modeSelect = document.createElement("select");
 
-  button.type = "button";
-  label.textContent = app.name;
+  launchButton.type = "button";
+  launchButton.textContent = app.name;
 
-  if (app.faviconUrl) {
-    const icon = document.createElement("img");
-
-    icon.src = app.faviconUrl;
-    icon.alt = "";
-    icon.width = 16;
-    icon.height = 16;
-
-    icon.addEventListener("error", () => {
-      icon.replaceWith(createFallbackIcon(app));
-    });
-
-    button.append(icon);
-  } else {
-    button.append(createFallbackIcon(app));
-  }
-
-  button.append(label);
-
-  button.addEventListener("click", () => {
+  launchButton.addEventListener("click", () => {
     void launchApp(app);
   });
 
-  item.append(button);
+  const tabOption = new Option("Pestaña", "tab");
+  const floatingOption = new Option("Flotante", "floating");
+
+  modeSelect.append(tabOption, floatingOption);
+  modeSelect.value = app.launchMode ?? "tab";
+
+  modeSelect.addEventListener("change", () => {
+    void changeLaunchMode(
+      app,
+      modeSelect.value as AppLaunchMode
+    );
+  });
+
+  item.append(launchButton, modeSelect);
 
   return item;
 }
@@ -118,3 +116,22 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     void renderApps();
   }
 });
+
+async function changeLaunchMode(
+  app: DockApp,
+  launchMode: AppLaunchMode
+): Promise<void> {
+  await updateDockApp({
+    ...app,
+    launchMode,
+    floatingWindow:
+      launchMode === "floating"
+        ? app.floatingWindow ?? {
+            pinned: true,
+            width: 420
+          }
+        : app.floatingWindow
+  });
+
+  await renderApps();
+}

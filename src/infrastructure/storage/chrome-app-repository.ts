@@ -26,7 +26,8 @@ export async function saveDockApp(urlValue: string): Promise<DockApp> {
   const app: DockApp = {
     id: crypto.randomUUID(),
     name: url.hostname.replace(/^www\./, ""),
-    url: url.href
+    url: url.href,
+    launchMode: "tab"
   };
 
   await chrome.storage.local.set({
