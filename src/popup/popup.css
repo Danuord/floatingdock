@@ -1,0 +1,52 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #f4f7fb;
+  background: #151922;
+}
+
+body {
+  margin: 0;
+}
+
+.popup {
+  width: 280px;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+}
+
+input,
+button {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+input {
+  border: 1px solid #394150;
+  background: #202633;
+  color: inherit;
+}
+
+button {
+  border: 0;
+  background: #4f7cff;
+  color: white;
+  cursor: pointer;
+}
+
+#status {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: #b8c2d1;
+  font-size: 13px;
+}

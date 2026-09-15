@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Floating Dock</title>
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Floating Dock</h1>
+
+      <form id="open-app-form">
+        <label for="app-url">URL de prueba</label>
+        <input
+          id="app-url"
+          name="url"
+          type="url"
+          value="https://www.youtube.com"
+          placeholder="https://ejemplo.com"
+          required
+        />
+        <button type="submit">Abrir ventana</button>
+      </form>
+
+      <p id="status" role="status"></p>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
