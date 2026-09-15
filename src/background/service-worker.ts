@@ -3,6 +3,17 @@ import {
   type OpenWebAppResponse
 } from "../shared/messages";
 
+import {
+  findDockAppById,
+  updateDockApp,
+  updateDockAppFavicon
+} from "../infrastructure/storage/chrome-app-repository";
+
+import {
+  isLaunchDockAppRequest,
+  type LaunchDockAppResponse
+} from "../shared/messages";
+
 const DEFAULT_WINDOW_OPTIONS = {
   type: "popup" as const,
   width: 420,
@@ -25,40 +36,53 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
 
-  void createWebAppWindow(message.url, sendResponse);
+  void createWebAppTab(message.url, sendResponse);
 
   // Mantiene activo el canal para responder cuando termine la operación asíncrona.
   return true;
 });
 
-async function createWebAppWindow(
+async function createWebAppTab(
   url: string,
   sendResponse: (response: OpenWebAppResponse) => void
 ): Promise<void> {
   try {
-  const createdWindow = await chrome.windows.create({
-    ...DEFAULT_WINDOW_OPTIONS,
-    url
-  });
+    const focusedWindow = await chrome.windows.getLastFocused();
 
-  if (!createdWindow || typeof createdWindow.id !== "number") {
-  sendResponse({
-    ok: false,
-    error: "Edge no devolvió una ventana válida."
-  });
+    if (!focusedWindow || typeof focusedWindow.id !== "number") {
+      sendResponse({
+        ok: false,
+        error: "No se encontró una ventana de Edge válida."
+      });
 
-    return;
-}
+      return;
+    }
 
-  const windowId: number = createdWindow.id;
+    const createdTab = await chrome.tabs.create({
+      windowId: focusedWindow.id,
+      url,
+      active: true
+    });
 
-  sendResponse({
-    ok: true,
-    windowId
-  });
-} catch (error) {
-  // ...
-}
+    if (!createdTab || typeof createdTab.id !== "number") {
+      sendResponse({
+        ok: false,
+        error: "Edge no devolvió una pestaña válida."
+      });
+
+      return;
+    }
+
+    sendResponse({
+      ok: true,
+      tabId: createdTab.id
+    });
+  } catch (error) {
+    sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : "Error desconocido."
+    });
+  }
 }
 
 function isValidWebUrl(value: string): boolean {
@@ -69,3 +93,116 @@ function isValidWebUrl(value: string): boolean {
     return false;
   }
 }
+
+chrome.action.onClicked.addListener((tab) => {
+  console.log("Intentando abrir el panel lateral.", tab.windowId);
+
+  void chrome.sidePanel.open({ windowId: tab.windowId }).catch((error) => {
+    console.error("No se pudo abrir el panel lateral:", error);
+  });
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (!isLaunchDockAppRequest(message)) {
+    return;
+  }
+
+  void launchDockApp(message.appId, sendResponse);
+
+  return true;
+});
+
+async function launchDockApp(
+  appId: string,
+  sendResponse: (response: LaunchDockAppResponse) => void
+): Promise<void> {
+  try {
+    const app = await findDockAppById(appId);
+
+    if (!app) {
+      sendResponse({
+        ok: false,
+        error: "No se encontró la aplicación guardada."
+      });
+
+      return;
+    }
+
+    if (typeof app.tabId === "number") {
+      try {
+        const existingTab = await chrome.tabs.get(app.tabId);
+
+        if (existingTab && typeof existingTab.windowId === "number") {
+          await chrome.windows.update(existingTab.windowId, {
+            focused: true
+          });
+
+          await chrome.tabs.update(app.tabId, {
+            active: true
+          });
+
+          sendResponse({
+            ok: true,
+            tabId: app.tabId
+          });
+
+          return;
+        }
+      } catch {
+        // La pestaña fue cerrada; se creará una nueva.
+      }
+    }
+
+    const focusedWindow = await chrome.windows.getLastFocused();
+
+    if (!focusedWindow || typeof focusedWindow.id !== "number") {
+      sendResponse({
+        ok: false,
+        error: "No se encontró una ventana de Edge válida."
+      });
+
+      return;
+    }
+
+    const createdTab = await chrome.tabs.create({
+      windowId: focusedWindow.id,
+      url: app.url,
+      active: true
+    });
+
+    if (!createdTab || typeof createdTab.id !== "number") {
+      sendResponse({
+        ok: false,
+        error: "Edge no devolvió una pestaña válida."
+      });
+
+      return;
+    }
+
+    await updateDockApp({
+      ...app,
+      tabId: createdTab.id
+    });
+
+    sendResponse({
+      ok: true,
+      tabId: createdTab.id
+    });
+  } catch (error) {
+    sendResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : "Error desconocido."
+    });
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (
+    typeof changeInfo.favIconUrl !== "string" ||
+    changeInfo.favIconUrl.length === 0
+  ) {
+    return;
+  }
+
+  void updateDockAppFavicon(tabId, changeInfo.favIconUrl);
+});

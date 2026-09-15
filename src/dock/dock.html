@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Floating Dock</title>
+  </head>
+  <body>
+    <main>
+      <h1>Floating Dock</h1>
+
+      <form id="save-app-form">
+        <label for="app-url">Página web</label>
+        <input
+          id="app-url"
+          type="url"
+          placeholder="https://ejemplo.com"
+          required
+        />
+        <button type="submit">Guardar página web</button>
+      </form>
+
+      <p id="status" role="status"></p>
+
+      <h2>Mis aplicaciones</h2>
+      <ul id="app-list"></ul>
+    </main>
+
+    <script type="module" src="dock.ts"></script>
+  </body>
+</html>

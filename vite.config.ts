@@ -13,7 +13,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve(sourceDirectory, "popup/popup.html"),
+        dock: resolve(sourceDirectory, "dock/dock.html"),
         serviceWorker: resolve(
           sourceDirectory,
           "background/service-worker.ts"

@@ -3,10 +3,12 @@
   "name": "Floating Dock",
   "version": "0.1.0",
   "description": "Dock lateral para gestionar aplicaciones web en ventanas flotantes.",
-  "permissions": ["storage", "tabs", "windows"],
+  "permissions": ["storage", "tabs", "windows", "sidePanel"],
   "action": {
-    "default_title": "Floating Dock",
-    "default_popup": "popup/popup.html"
+    "default_title": "Abrir Floating Dock"
+  },
+  "side_panel": {
+    "default_path": "dock/dock.html"
   },
   "background": {
     "service_worker": "background/service-worker.js",
