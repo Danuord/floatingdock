@@ -1,137 +1,343 @@
-import type {
-  AppLaunchMode,
-  DockApp
-} from "../domain/entities/dock-app";
-import {
-  listDockApps,
-  saveDockApp,
-  updateDockApp
-} from "../infrastructure/storage/chrome-app-repository";
+// src/dock/dock.ts
+import type { Router, TipoRouter, EstadoRouter } from '../domain/entities/router';
+import { TECNICOS, USUARIOS } from '../domain/entities/tecnicos';
+import { ChromeRouterRepository } from '../infrastructure/storage/chrome-router-repository';
+import { ChromeMovimientoRepository } from '../infrastructure/storage/chrome-movimiento-repository';
+import { RouterService } from '../domain/services/router-service';
+import { calcularStockPorTipo, type StockPorTipo } from '../domain/services/stock-calculator';
+import { abrirNuevoModal } from './views/modals/nuevo-modal';
+import { abrirRetornoModal } from './views/modals/retorno-modal';
 
-import {
-  type LaunchDockAppRequest,
-  type LaunchDockAppResponse
-} from "../shared/messages";
+// ── Instancias ─────────────────────────────────────────
+const routerRepo = new ChromeRouterRepository();
+const movRepo = new ChromeMovimientoRepository();
+const service = new RouterService(routerRepo, movRepo);
 
-const form = document.querySelector<HTMLFormElement>("#save-app-form");
-const input = document.querySelector<HTMLInputElement>("#app-url");
-const status = document.querySelector<HTMLParagraphElement>("#status");
-const appList = document.querySelector<HTMLUListElement>("#app-list");
+// ── Estado ─────────────────────────────────────────────
+let routers: Router[] = [];
+let selectedSerial: string | null = null;
+let currentFilter: EstadoRouter = 'nuevo';
+let currentSearch = '';
+let currentPage = 1;
+const pageSize = 10;
+let usuarioActual = USUARIOS[0] ?? 'Usuario';
 
-if (!form || !input || !status || !appList) {
-  throw new Error("No se encontró la interfaz del dock.");
+// ── Helpers ────────────────────────────────────────────
+function formatDate(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+function getTipoLabel(t: TipoRouter): string {
+  return { duo: 'Duo', internet: 'Internet', cable: 'Cable' }[t];
+}
 
-  try {
-    const app = await saveDockApp(input.value.trim());
+function getEstadoLabel(e: EstadoRouter): string {
+  return {
+    nuevo: 'Nuevo',
+    optimo: 'Óptimo',
+    en_revision: 'En revisión',
+    dañado: 'Dañado',
+  }[e];
+}
 
-    status.textContent = `"${app.name}" guardada correctamente.`;
-    input.value = "";
+function getUbicacionLabel(u: 'oficina' | 'campo'): string {
+  return u === 'oficina' ? 'Oficina' : 'Campo';
+}
 
-    await renderApps();
-  } catch (error) {
-    status.textContent =
-      error instanceof Error ? error.message : "No se pudo guardar la página.";
-  }
-});
+function setToday(input: HTMLInputElement) {
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  input.value = iso;
+}
 
-async function renderApps(): Promise<void> {
-    if (!appList) {
-        throw new Error("No se encontró la lista de aplicaciones.");
+// ── Elementos ──────────────────────────────────────────
+const elUsuario = document.querySelector<HTMLSelectElement>('#usuario-actual')!;
+const elFiltro = document.querySelector<HTMLSelectElement>('#filtro-estado')!;
+const elBtnAgregar = document.querySelector<HTMLButtonElement>('#btn-agregar')!;
+const elBuscar = document.querySelector<HTMLInputElement>('#buscar-serial')!;
+const elTablaBody = document.querySelector<HTMLTableSectionElement>('#tabla-body')!;
+const elTablaTitulo = document.querySelector<HTMLSpanElement>('#tabla-titulo')!;
+const elContador = document.querySelector<HTMLSpanElement>('#contador')!;
+const elPagInfo = document.querySelector<HTMLSpanElement>('#pag-info')!;
+const elPagPrev = document.querySelector<HTMLButtonElement>('#pag-prev')!;
+const elPagNext = document.querySelector<HTMLButtonElement>('#pag-next')!;
+const elDetalleInfo = document.querySelector<HTMLDivElement>('#detalle-info')!;
+const elBtnAsignarCliente = document.querySelector<HTMLButtonElement>('#btn-asignar-cliente')!;
+const elFormSalida = document.querySelector<HTMLDivElement>('.form-salida')!;
+const elSalidaSerial = document.querySelector<HTMLInputElement>('#salida-serial')!;
+const elSalidaFecha = document.querySelector<HTMLInputElement>('#salida-fecha')!;
+const elSalidaTecnico = document.querySelector<HTMLSelectElement>('#salida-tecnico')!;
+const elBtnRegistrarSalida = document.querySelector<HTMLButtonElement>('#btn-registrar-salida')!;
+const elFormRevision = document.querySelector<HTMLDivElement>('#detalle-revision')!;
+const elRevisionSerial = document.querySelector<HTMLInputElement>('#revision-serial')!;
+const elRevisionFecha = document.querySelector<HTMLInputElement>('#revision-fecha')!;
+const elRevisionDetalle = document.querySelector<HTMLTextAreaElement>('#revision-detalle')!;
+const elBtnRegistrarRevision = document.querySelector<HTMLButtonElement>('#btn-registrar-revision')!;
+const elBtnRegistrarMerma = document.querySelector<HTMLButtonElement>('#btn-registrar-merma')!;
+const elStockLista = document.querySelector<HTMLDivElement>('#stock-lista')!;
+const elBtnExportar = document.querySelector<HTMLButtonElement>('#btn-exportar')!;
+
+// ── Inicialización ─────────────────────────────────────
+function init() {
+  // Poblar usuario
+  elUsuario.replaceChildren(
+    ...USUARIOS.map(u => new Option(u, u)),
+  );
+  elUsuario.value = usuarioActual;
+  elUsuario.addEventListener('change', () => {
+    usuarioActual = elUsuario.value;
+  });
+
+  // Poblar técnicos
+  elSalidaTecnico.replaceChildren(
+    ...TECNICOS.map(t => new Option(t, t)),
+  );
+
+  // Fechas por defecto
+  setToday(elSalidaFecha);
+  setToday(elRevisionFecha);
+
+  // Event listeners
+  elFiltro.addEventListener('change', () => {
+    currentFilter = elFiltro.value as EstadoRouter;
+    currentPage = 1;
+    selectedSerial = null;
+    actualizarBotonAgregar(); 
+    refresh();
+  });
+
+  elBuscar.addEventListener('input', () => {
+    currentSearch = elBuscar.value.trim().toLowerCase();
+    currentPage = 1;
+    renderTabla();
+  });
+
+  elPagPrev.addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; renderTabla(); }
+  });
+  elPagNext.addEventListener('click', () => {
+    const total = filteredRouters().length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage < totalPages) { currentPage++; renderTabla(); }
+  });
+
+  elBtnAgregar.addEventListener('click', agregarRouter);
+  elBtnAsignarCliente.addEventListener('click', asignarCliente);
+  elBtnRegistrarSalida.addEventListener('click', registrarSalida);
+  elBtnRegistrarRevision.addEventListener('click', () => registrarRevision('optimo'));
+  elBtnRegistrarMerma.addEventListener('click', () => registrarRevision('merma'));
+
+  elBtnExportar.addEventListener('click', () => alert('Exportar próximamente'));
+
+  // Escuchar cambios en storage
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (changes.routers || changes.movimientos)) {
+      refresh();
     }
-    const apps = await listDockApps();
-
-    appList.replaceChildren(
-        ...apps.map((app) => createAppItem(app))
-    );
-}
-
-function createAppItem(app: DockApp): HTMLLIElement {
-  const item = document.createElement("li");
-  const launchButton = document.createElement("button");
-  const modeSelect = document.createElement("select");
-
-  launchButton.type = "button";
-  launchButton.textContent = app.name;
-
-  launchButton.addEventListener("click", () => {
-    void launchApp(app);
   });
 
-  const tabOption = new Option("Pestaña", "tab");
-  const floatingOption = new Option("Flotante", "floating");
-
-  modeSelect.append(tabOption, floatingOption);
-  modeSelect.value = app.launchMode ?? "tab";
-
-  modeSelect.addEventListener("change", () => {
-    void changeLaunchMode(
-      app,
-      modeSelect.value as AppLaunchMode
-    );
-  });
-
-  item.append(launchButton, modeSelect);
-
-  return item;
+  refresh();
 }
 
-function createFallbackIcon(app: DockApp): HTMLSpanElement {
-  const fallback = document.createElement("span");
+// ── Datos ──────────────────────────────────────────────
 
-  fallback.textContent = app.name.charAt(0).toUpperCase();
-
-  return fallback;
-}
-
-async function launchApp(app: DockApp): Promise<void> {
-  const statusElement = status;
-
-  if (!statusElement) {
-    throw new Error("No se encontró el área de estado.");
-  }
-
-  statusElement.textContent = `Abriendo ${app.name}...`;
-
-  const request: LaunchDockAppRequest = {
-    type: "LAUNCH_DOCK_APP",
-    appId: app.id
+function actualizarBotonAgregar() {
+  const textos: Record<EstadoRouter, string> = {
+    nuevo: 'Agregar nuevo',
+    optimo: 'Agregar optimo',
+    en_revision: 'Agregar retorno',
+    dañado: 'Agregar',
   };
-
-  const response: LaunchDockAppResponse =
-    await chrome.runtime.sendMessage(request);
-
-  statusElement.textContent = response.ok
-    ? `${app.name} está activa.`
-    : `Error: ${response.error ?? "Error desconocido."}`;
+  elBtnAgregar.textContent = textos[currentFilter];
 }
 
-void renderApps();
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "local" && changes.dockApps) {
-    void renderApps();
+async function refresh() {
+  routers = await routerRepo.getAll();
+  // Si el seleccionado ya no está en el filtro actual, limpiar selección
+  if (selectedSerial) {
+    const still = filteredRouters().some(r => r.serial === selectedSerial);
+    if (!still) selectedSerial = null;
   }
-});
-
-async function changeLaunchMode(
-  app: DockApp,
-  launchMode: AppLaunchMode
-): Promise<void> {
-  await updateDockApp({
-    ...app,
-    launchMode,
-    floatingWindow:
-      launchMode === "floating"
-        ? app.floatingWindow ?? {
-            pinned: true,
-            width: 420
-          }
-        : app.floatingWindow
-  });
-
-  await renderApps();
+  renderTabla();
+  renderDetalle();
+  renderStock();
 }
+
+
+function filteredRouters(): Router[] {
+  return routers
+    .filter(r => r.estado === currentFilter)
+    .filter(r => currentSearch === '' || r.serial.toLowerCase().includes(currentSearch))
+    .sort((a, b) => b.fechaIngreso - a.fechaIngreso);
+}
+
+function paginatedRouters(): Router[] {
+  const list = filteredRouters();
+  const start = (currentPage - 1) * pageSize;
+  return list.slice(start, start + pageSize);
+}
+
+// ── Render ─────────────────────────────────────────────
+function renderTabla() {
+  const list = filteredRouters();
+  const page = paginatedRouters();
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  elTablaTitulo.textContent = currentFilter === 'en_revision' ? 'Equipos a revisar' : 'Conteo de equipos';
+  elContador.textContent = `Mostrando ${page.length} de ${total}`;
+  elPagInfo.textContent = String(currentPage);
+  elPagPrev.disabled = currentPage <= 1;
+  elPagNext.disabled = currentPage >= totalPages;
+
+  elTablaBody.replaceChildren(
+    ...page.map(r => {
+      const tr = document.createElement('tr');
+      if (r.serial === selectedSerial) tr.classList.add('selected');
+      tr.innerHTML = `
+        <td>${r.lote ?? '—'}</td>
+        <td>${formatDate(r.fechaIngreso)}</td>
+        <td>${r.serial}</td>
+        <td>${getTipoLabel(r.tipo)}</td>
+        <td>${getEstadoLabel(r.estado)}</td>
+      `;
+      tr.addEventListener('click', () => {
+        selectedSerial = r.serial;
+        renderTabla();
+        renderDetalle();
+      });
+      return tr;
+    }),
+  );
+}
+
+function renderDetalle() {
+  const router = selectedSerial ? routers.find(r => r.serial === selectedSerial) : null;
+
+  if (!router) {
+    elDetalleInfo.innerHTML = `
+      <div><strong>Serial:</strong> —</div>
+      <div><strong>Técnico:</strong> —</div>
+      <div><strong>Fabricante:</strong> —</div>
+      <div><strong>Cliente:</strong> —</div>
+      <div><strong>Fecha de ingreso:</strong> —</div>
+      <div><strong>Tipo:</strong> —</div>
+      <div><strong>Agregado por:</strong> —</div>
+      <div><strong>Tecnología:</strong> —</div>
+    `;
+    elFormSalida.hidden = true;
+    elFormRevision.hidden = true;
+    elBtnAsignarCliente.hidden = true;
+    return;
+  }
+
+  elDetalleInfo.innerHTML = `
+    <div><strong>Serial:</strong> ${router.serial}</div>
+    <div><strong>Técnico:</strong> ${router.tecnicoActual ?? '—'}</div>
+    <div><strong>Fabricante:</strong> ${router.fabricante ?? '—'}</div>
+    <div><strong>Cliente:</strong> ${router.clienteActual ?? '—'}</div>
+    <div><strong>Fecha de ingreso:</strong> ${formatDate(router.fechaIngreso)}</div>
+    <div><strong>Tipo:</strong> ${getTipoLabel(router.tipo)}</div>
+    <div><strong>Ubicación:</strong> ${getUbicacionLabel(router.ubicacion)}</div>
+    <div><strong>Tecnología:</strong> ${router.tecnologia ?? '—'}</div>
+  `;
+
+  elBtnAsignarCliente.hidden = router.estado === 'en_revision';
+
+  if (router.estado === 'en_revision') {
+    elFormSalida.hidden = true;
+    elFormRevision.hidden = false;
+    elRevisionSerial.value = router.serial;
+    elRevisionDetalle.value = '';
+    setToday(elRevisionFecha);
+  } else {
+    elFormSalida.hidden = false;
+    elFormRevision.hidden = true;
+    elSalidaSerial.value = router.serial;
+    setToday(elSalidaFecha);
+  }
+}
+
+function renderStock() {
+  const stock = calcularStockPorTipo(routers);
+  elStockLista.replaceChildren(
+    ...stock.map(s => {
+      const div = document.createElement('div');
+      div.className = 'stock-item';
+      const alertaClass = s.alerta === 'ok' ? 'ok' : s.alerta === 'bajo' ? 'bajo' : 'agotado';
+      div.innerHTML = `
+        <div class="nombre">${getTipoLabel(s.tipo)}</div>
+        <div class="dot ${alertaClass}"></div>
+        <div class="num">${s.cantidad}</div>
+      `;
+      return div;
+    }),
+  );
+}
+
+// ── Acciones ───────────────────────────────────────────
+async function agregarRouter() {
+  if (currentFilter === 'nuevo') {
+    abrirNuevoModal(async (data) => {
+      try {
+        await service.registrarNuevo({ ...data, usuario: usuarioActual });
+        await refresh();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Error al registrar');
+      }
+    });
+  } else {
+    // 'optimo' o 'en_revision' → modal de retorno
+    const destino = currentFilter === 'optimo' ? 'optimo' : 'a_revisar';
+    abrirRetornoModal(destino, async (data) => {
+      try {
+        await service.registrarRetorno({ ...data, usuario: usuarioActual });
+        await refresh();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Error al registrar retorno');
+      }
+    });
+  }
+}
+
+async function asignarCliente() {
+  if (!selectedSerial) return;
+  const cliente = prompt('Nombre del cliente:');
+  if (!cliente) return;
+  try {
+    await service.asignarCliente({ serial: selectedSerial, cliente, usuario: usuarioActual });
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error al asignar');
+  }
+}
+
+async function registrarSalida() {
+  if (!selectedSerial) return;
+  const tecnico = elSalidaTecnico.value;
+  if (!tecnico) { alert('Selecciona un técnico'); return; }
+  try {
+    await service.registrarSalida({ serial: selectedSerial, tecnico, usuario: usuarioActual });
+    selectedSerial = null;
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error al registrar salida');
+  }
+}
+
+async function registrarRevision(resultado: 'optimo' | 'merma') {
+  if (!selectedSerial) return;
+  const detalle = elRevisionDetalle.value.trim() || undefined;
+  try {
+    await service.registrarRevision({ serial: selectedSerial, resultado, detalle, usuario: usuarioActual });
+    selectedSerial = null;
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error al registrar revisión');
+  }
+}
+
+// ── Arranque ───────────────────────────────────────────
+init();

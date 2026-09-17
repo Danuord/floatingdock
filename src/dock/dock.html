@@ -2,28 +2,118 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <title>Floating Dock</title>
+    <title>InventorySide</title>
+    <link rel="stylesheet" href="dock.css" />
   </head>
   <body>
-    <main>
-      <h1>Floating Dock</h1>
+    <header class="top-bar">
+      <select id="usuario-actual" title="Usuario actual"></select>
+      <button id="btn-exportar" type="button">Exportar</button>
+    </header>
 
-      <form id="save-app-form">
-        <label for="app-url">Página web</label>
-        <input
-          id="app-url"
-          type="url"
-          placeholder="https://ejemplo.com"
-          required
-        />
-        <button type="submit">Guardar página web</button>
-      </form>
+    <nav class="tabs">
+      <button class="tab active" data-tab="routers">Routers</button>
+      <button class="tab" data-tab="materiales" disabled>Materiales</button>
+      <button class="tab" data-tab="ferreteria" disabled>Ferretería</button>
+    </nav>
 
-      <p id="status" role="status"></p>
+    <section class="filters">
+      <select id="filtro-estado">
+        <option value="nuevo">Nuevos</option>
+        <option value="optimo">Óptimo</option>
+        <option value="en_revision">A revisar</option>
+      </select>
+      <button id="btn-agregar" type="button">Agregar</button>
+    </section>
 
-      <h2>Mis aplicaciones</h2>
-      <ul id="app-list"></ul>
-    </main>
+    <section class="tabla-wrap">
+      <div class="tabla-header">
+        <span id="tabla-titulo">Conteo de equipos</span>
+        <input id="buscar-serial" type="search" placeholder="Buscar por serial" />
+      </div>
+
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Lote</th>
+            <th>Fecha ingreso</th>
+            <th>Serial</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-body"></tbody>
+      </table>
+
+      <div class="tabla-footer">
+        <span id="contador">Mostrando 0 de 0</span>
+        <div class="paginacion">
+          <button id="pag-prev" type="button">◀</button>
+          <span id="pag-info">1</span>
+          <button id="pag-next" type="button">▶</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="detalle" class="detalle">
+  <div id="detalle-info" class="detalle-info">
+    <div><strong>Serial:</strong> —</div>
+    <div><strong>Técnico:</strong> —</div>
+    <div><strong>Fabricante:</strong> —</div>
+    <div><strong>Cliente:</strong> —</div>
+    <div><strong>Fecha de ingreso:</strong> —</div>
+    <div><strong>Tipo:</strong> —</div>
+    <div><strong>Agregado por:</strong> —</div>
+    <div><strong>Tecnología:</strong> —</div>
+  </div>
+
+  <button id="btn-asignar-cliente" type="button" class="link-btn">Asignar cliente</button>
+
+  <div class="form-salida">
+    <h4>Registrar salida</h4>
+    <div class="fila">
+      <label>Serial</label>
+      <input id="salida-serial" type="text" readonly />
+    </div>
+    <div class="fila">
+      <label>Fecha</label>
+      <input id="salida-fecha" type="date" />
+    </div>
+    <div class="fila">
+      <label>Técnico</label>
+      <select id="salida-tecnico"></select>
+    </div>
+    <button id="btn-registrar-salida" type="button">Registrar</button>
+  </div>
+
+  <div id="detalle-revision" class="form-revision" hidden>
+    <h4>Registrar revisión</h4>
+    <div class="fila">
+      <label>Serial</label>
+      <input id="revision-serial" type="text" readonly />
+    </div>
+    <div class="fila">
+      <label>Fecha</label>
+      <input id="revision-fecha" type="date" />
+    </div>
+    <div class="fila">
+      <label>Agregar detalle</label>
+      <textarea id="revision-detalle"></textarea>
+    </div>
+    <div class="acciones-revision">
+      <button id="btn-registrar-revision" type="button">Registrar</button>
+      <button id="btn-registrar-merma" type="button">Merma</button>
+    </div>
+  </div>
+</section>
+
+    <section class="stock-widget">
+      <h3>Stock por tipo</h3>
+      <div id="stock-lista" class="stock-lista"></div>
+    </section>
+
+    <!-- Contenedor de modales -->
+    <div id="modal-root"></div>
 
     <script type="module" src="dock.ts"></script>
   </body>
