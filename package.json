@@ -12,5 +12,8 @@
     "@types/node": "^22.15.30",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@zxing/library": "^0.23.0"
   }
 }

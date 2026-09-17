@@ -1,6 +1,7 @@
 // src/infrastructure/storage/chrome-router-repository.ts
 import type { Router } from '../../domain/entities/router';
 import type { RouterRepository } from '../../domain/repositories/router-repository';
+import { pushRouter } from './sheets-sync';
 
 const KEY = 'routers';
 
@@ -21,6 +22,8 @@ export class ChromeRouterRepository implements RouterRepository {
     if (idx >= 0) all[idx] = router;
     else all.push(router);
     await chrome.storage.local.set({ [KEY]: all });
+    // Fire and forget a Sheets
+    void pushRouter(router);
   }
 
   async delete(id: string): Promise<void> {

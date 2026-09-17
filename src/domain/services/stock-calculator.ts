@@ -13,7 +13,7 @@ export interface StockPorTipo {
 export function calcularStockPorTipo(routers: Router[]): StockPorTipo[] {
   // Solo cuentan los que están en oficina y no están dañados
   const enOficina = routers.filter(
-    r => r.ubicacion === 'oficina' && r.estado !== 'dañado',
+    r => r.ubicacion === 'oficina' && (r.estado === 'nuevo' || r.estado === 'optimo'),
   );
 
   return (Object.keys(UMBRALES_STOCK) as TipoRouter[]).map(tipo => {
@@ -27,4 +27,16 @@ export function calcularStockPorTipo(routers: Router[]): StockPorTipo[] {
 
     return { tipo, cantidad, alerta };
   });
+}
+
+export function calcularEnRevision(routers: Router[]): StockPorTipo[] {
+  const pendientes = routers.filter(
+    r => r.estado === 'en_revision' && r.ubicacion === 'oficina',
+  );
+
+  return (Object.keys(UMBRALES_STOCK) as TipoRouter[]).map(tipo => ({
+    tipo,
+    cantidad: pendientes.filter(r => r.tipo === tipo).length,
+    alerta: 'ok',
+  }));
 }

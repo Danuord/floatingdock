@@ -45,3 +45,15 @@ export function isLaunchDockAppRequest(
     typeof (message as LaunchDockAppRequest).appId === "string"
   );
 }
+
+export interface SheetsRequest {
+  type: 'SHEETS';
+  accion: 'upsertRouter' | 'insertMovimiento' | 'getAll';
+  payload?: unknown;
+}
+
+export interface SheetsResponse {
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+}

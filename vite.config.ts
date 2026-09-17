@@ -14,6 +14,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         dock: resolve(sourceDirectory, "dock/dock.html"),
+        scanner: resolve(sourceDirectory, "dock/scanner.html"),
         serviceWorker: resolve(
           sourceDirectory,
           "background/service-worker.ts"

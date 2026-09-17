@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Escanear código</title>
+    <style>
+      body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #000; }
+      video { width: 100vw; height: 100vh; object-fit: cover; display: block; }
+      .hint {
+        position: fixed; bottom: 10px; left: 0; right: 0;
+        text-align: center; color: #fff; font-size: 12px;
+        background: rgba(0,0,0,0.6); padding: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="video" playsinline autoplay muted></video>
+    <div class="hint">Apunta al código de barras</div>
+    <script type="module" src="scanner.ts"></script>
+  </body>
+</html>

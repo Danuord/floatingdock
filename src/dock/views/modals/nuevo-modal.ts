@@ -33,6 +33,12 @@ export function abrirNuevoModal(
   inputSerial.type = 'text';
   inputSerial.placeholder = 'Ej: OPTI597C8779';
 
+  const btnScan = document.createElement('button');
+  btnScan.type = 'button';
+  btnScan.textContent = '📷';
+  btnScan.title = 'Escanear código';
+  btnScan.style.cssText = 'padding: 2px 6px; cursor: pointer;';
+
   const selectTipo = document.createElement('select');
   selectTipo.append(
     new Option('Duo', 'duo'),
@@ -54,8 +60,14 @@ export function abrirNuevoModal(
   inputLote.type = 'text';
   inputLote.placeholder = 'Ej: 009';
 
+  const filaSerial = document.createElement('div');
+  filaSerial.className = 'fila';
+  const lblSerial = document.createElement('label');
+  lblSerial.textContent = 'Serial *';
+  filaSerial.append(lblSerial, inputSerial, btnScan);
+
   form.append(
-    campo('Serial *', inputSerial),
+    filaSerial,
     campo('Tipo *', selectTipo),
     campo('Fabricante', inputFabricante),
     campo('Tecnología', selectTecnologia),
@@ -76,6 +88,28 @@ export function abrirNuevoModal(
     const detectado = detectarFabricante(inputSerial.value);
     if (detectado) inputFabricante.value = detectado;
   });
+
+  btnScan.addEventListener('click', () => {
+    chrome.windows.create({
+      url: chrome.runtime.getURL('dock/scanner.html'),
+      type: 'popup',
+      width: 400,
+      height: 500,
+    });
+  });
+
+  const onScannerChange = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    area: string,
+  ) => {
+    if (area !== 'local' || !changes['scanner-result']) return;
+    const { codigo } = changes['scanner-result'].newValue as { codigo: string };
+    inputSerial.value = codigo;
+    inputSerial.dispatchEvent(new Event('input'));
+    void chrome.storage.local.remove('scanner-result');
+    chrome.storage.onChanged.removeListener(onScannerChange);
+  };
+  chrome.storage.onChanged.addListener(onScannerChange);
 
   const cerrar = abrirModal({
     titulo: 'Agregar router nuevo',

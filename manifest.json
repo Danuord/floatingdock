@@ -1,9 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Floating Dock",
+  "name": "InventarySide",
   "version": "0.1.0",
   "description": "Dock lateral para gestionar aplicaciones web en ventanas flotantes.",
   "permissions": ["storage", "tabs", "windows", "sidePanel"],
+  "host_permissions": [
+  "https://script.google.com/*",
+  "https://script.googleusercontent.com/*"
+  ],
   "action": {
     "default_title": "Abrir Floating Dock"
   },
@@ -13,5 +17,8 @@
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
+  },
+  "content_security_policy": {
+  "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

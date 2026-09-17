@@ -7,7 +7,8 @@ export type TipoMovimiento =
   | 'salida'
   | 'asignacion_cliente'
   | 'revision'
-  | 'merma';
+  | 'merma'
+  | 'desasignacion';
 
 export interface Movimiento {
   id: string;
@@ -21,6 +22,7 @@ export interface Movimiento {
   destino?: 'optimo' | 'a_revisar';
   detalle?: string;
   resultado?: 'optimo' | 'merma';
+  fechaRetorno?: number;
 
   fecha: number;
   usuario: string;

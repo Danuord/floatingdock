@@ -112,6 +112,7 @@ export class RouterService {
   async registrarSalida(params: {
     serial: string;
     tecnico: string;
+    motivo: string;
     usuario: string;
   }): Promise<Router> {
     const router = await this.routers.getBySerial(params.serial);
@@ -123,6 +124,7 @@ export class RouterService {
     await this.routers.save(router);
     await this.registrar('salida', router, params.usuario, {
       tecnico: params.tecnico,
+      motivo: params.motivo,
     });
     return router;
   }
@@ -131,6 +133,7 @@ export class RouterService {
   async asignarCliente(params: {
     serial: string;
     cliente: string;
+    motivo: string;
     usuario: string;
   }): Promise<Router> {
     const router = await this.routers.getBySerial(params.serial);
@@ -141,6 +144,29 @@ export class RouterService {
     await this.routers.save(router);
     await this.registrar('asignacion_cliente', router, params.usuario, {
       cliente: params.cliente,
+      motivo: params.motivo,
+    });
+    return router;
+  }
+
+  async desasignarTecnico(params: {
+    serial: string;
+    usuario: string;
+  }): Promise<Router> {
+    const router = await this.routers.getBySerial(params.serial);
+    if (!router) throw new Error(`Serial ${params.serial} no existe`);
+
+    const tecnicoSnapshot = router.tecnicoActual;
+    const clienteSnapshot = router.clienteActual;
+
+    router.ubicacion = 'oficina';
+    router.tecnicoActual = undefined;
+    router.clienteActual = undefined;
+    router.actualizadoEn = Date.now();
+    await this.routers.save(router);
+    await this.registrar('desasignacion', router, params.usuario, {
+      tecnico: tecnicoSnapshot,
+      cliente: clienteSnapshot,
     });
     return router;
   }
@@ -150,19 +176,42 @@ export class RouterService {
     serial: string;
     resultado: 'optimo' | 'merma';
     detalle?: string;
+    nuevoTipo?: TipoRouter;
     usuario: string;
   }): Promise<Router> {
     const router = await this.routers.getBySerial(params.serial);
     if (!router) throw new Error(`Serial ${params.serial} no existe`);
 
+    const clienteSnapshot = router.clienteActual;
+    const tecnicoSnapshot = router.tecnicoActual;
+    const tipoOriginal = router.tipo;
+
+    const movs = await this.movimientos.getBySerial(params.serial);
+    const ultimoRetorno = movs
+      .filter(m => m.tipo === 'retorno')
+      .sort((a, b) => b.fecha - a.fecha)[0];
+
     router.estado = params.resultado === 'optimo' ? 'optimo' : 'dañado';
+
+    if (params.resultado === 'optimo') {
+      router.clienteActual = undefined;
+      router.tecnicoActual = undefined;
+      if (params.nuevoTipo && params.nuevoTipo !== router.tipo) {
+        router.tipo = params.nuevoTipo;
+      }
+    }
+
     router.actualizadoEn = Date.now();
     await this.routers.save(router);
 
     const tipo: TipoMovimiento = params.resultado === 'optimo' ? 'revision' : 'merma';
     await this.registrar(tipo, router, params.usuario, {
+      routerTipo: tipoOriginal,
       detalle: params.detalle,
       resultado: params.resultado,
+      cliente: clienteSnapshot,
+      tecnico: tecnicoSnapshot,
+      fechaRetorno: ultimoRetorno?.fecha,
     });
     return router;
   }

@@ -4,14 +4,26 @@ import { TECNICOS, USUARIOS } from '../domain/entities/tecnicos';
 import { ChromeRouterRepository } from '../infrastructure/storage/chrome-router-repository';
 import { ChromeMovimientoRepository } from '../infrastructure/storage/chrome-movimiento-repository';
 import { RouterService } from '../domain/services/router-service';
-import { calcularStockPorTipo, type StockPorTipo } from '../domain/services/stock-calculator';
+import { calcularStockPorTipo, calcularEnRevision, type StockPorTipo } from '../domain/services/stock-calculator';
 import { abrirNuevoModal } from './views/modals/nuevo-modal';
 import { abrirRetornoModal } from './views/modals/retorno-modal';
+import { Movimiento } from '../domain/entities/movimiento';
+import { abrirClienteModal } from './views/modals/cliente-modal';
 
 // ── Instancias ─────────────────────────────────────────
 const routerRepo = new ChromeRouterRepository();
 const movRepo = new ChromeMovimientoRepository();
 const service = new RouterService(routerRepo, movRepo);
+const elHistorialRevisiones = document.querySelector<HTMLDivElement>('#historial-revisiones')!;
+const elHistorialBody = document.querySelector<HTMLTableSectionElement>('#historial-body')!;
+const elHistorialDetalle = document.querySelector<HTMLDivElement>('#historial-detalle')!;
+let selectedMovId: string | null = null;
+const elPerdidaCable = document.querySelector<HTMLInputElement>('#perdida-cable')!;
+const elPerdidaInternet = document.querySelector<HTMLInputElement>('#perdida-internet')!;
+const elSalidaMotivo = document.querySelector<HTMLSelectElement>('#salida-motivo')!;
+const elFormDesasignar = document.querySelector<HTMLDivElement>('#form-desasignar')!;
+const elBtnDesasignar = document.querySelector<HTMLButtonElement>('#btn-desasignar')!;
+
 
 // ── Estado ─────────────────────────────────────────────
 let routers: Router[] = [];
@@ -77,9 +89,24 @@ const elBtnRegistrarRevision = document.querySelector<HTMLButtonElement>('#btn-r
 const elBtnRegistrarMerma = document.querySelector<HTMLButtonElement>('#btn-registrar-merma')!;
 const elStockLista = document.querySelector<HTMLDivElement>('#stock-lista')!;
 const elBtnExportar = document.querySelector<HTMLButtonElement>('#btn-exportar')!;
+const elHistContador = document.querySelector<HTMLSpanElement>('#hist-contador')!;
+const elHistPagInfo = document.querySelector<HTMLSpanElement>('#hist-pag-info')!;
+const elHistPagPrev = document.querySelector<HTMLButtonElement>('#hist-pag-prev')!;
+const elHistPagNext = document.querySelector<HTMLButtonElement>('#hist-pag-next')!;
+let histPage = 1;
+let histTotal = 0;
+const histPageSize = 10;
 
 // ── Inicialización ─────────────────────────────────────
-function init() {
+async function init() {
+
+    try {
+      const { pullTodo } = await import('../infrastructure/storage/sheets-sync');
+      const { routers: r, movimientos: m } = await pullTodo();
+      await chrome.storage.local.set({ routers: r, movimientos: m });
+    } catch (e) {
+      console.warn('Sin conexión a Sheets, usando caché local', e);
+    }
   // Poblar usuario
   elUsuario.replaceChildren(
     ...USUARIOS.map(u => new Option(u, u)),
@@ -103,6 +130,8 @@ function init() {
     currentFilter = elFiltro.value as EstadoRouter;
     currentPage = 1;
     selectedSerial = null;
+    histPage = 1;
+    selectedMovId = null;
     actualizarBotonAgregar(); 
     refresh();
   });
@@ -130,6 +159,8 @@ function init() {
 
   elBtnExportar.addEventListener('click', () => alert('Exportar próximamente'));
 
+  elBtnDesasignar.addEventListener('click', desasignarTecnico);
+
   // Escuchar cambios en storage
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && (changes.routers || changes.movimientos)) {
@@ -137,7 +168,29 @@ function init() {
     }
   });
 
+  elHistPagPrev.addEventListener('click', () => {
+    if (histPage > 1) { histPage--; void renderHistorialRevisiones(); }
+  });
+  elHistPagNext.addEventListener('click', () => {
+    const total = Math.max(1, Math.ceil(histTotal / histPageSize));
+    if (histPage < total) { histPage++; void renderHistorialRevisiones(); }
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes['scanner-result']) return;
+     if (document.querySelector('.modal-overlay')) return;
+
+    const { codigo } = changes['scanner-result'].newValue as { codigo: string };
+    elBuscar.value = codigo;
+    currentSearch = codigo.trim().toLowerCase();
+    currentPage = 1;
+    renderTabla();
+    void chrome.storage.local.remove('scanner-result');
+    }
+);
+
   refresh();
+  
 }
 
 // ── Datos ──────────────────────────────────────────────
@@ -160,8 +213,15 @@ async function refresh() {
     if (!still) selectedSerial = null;
   }
   renderTabla();
-  renderDetalle();
-  renderStock();
+    await renderDetalle();
+    renderStock();
+    await renderHistorialRevisiones();
+    if (currentFilter !== 'en_revision') {
+    selectedMovId = null;
+    elHistorialDetalle.hidden = true;
+    elPerdidaCable.checked = false;
+    elPerdidaInternet.checked = false;
+  }
 }
 
 
@@ -213,7 +273,7 @@ function renderTabla() {
   );
 }
 
-function renderDetalle() {
+async function renderDetalle() {
   const router = selectedSerial ? routers.find(r => r.serial === selectedSerial) : null;
 
   if (!router) {
@@ -245,6 +305,7 @@ function renderDetalle() {
   `;
 
   elBtnAsignarCliente.hidden = router.estado === 'en_revision';
+  elFormDesasignar.hidden = router.ubicacion !== 'campo';
 
   if (router.estado === 'en_revision') {
     elFormSalida.hidden = true;
@@ -261,7 +322,11 @@ function renderDetalle() {
 }
 
 function renderStock() {
-  const stock = calcularStockPorTipo(routers);
+  const enRevision = currentFilter === 'en_revision';
+  const stock: StockPorTipo[] = enRevision
+    ? calcularEnRevision(routers)
+    : calcularStockPorTipo(routers);
+
   elStockLista.replaceChildren(
     ...stock.map(s => {
       const div = document.createElement('div');
@@ -269,12 +334,76 @@ function renderStock() {
       const alertaClass = s.alerta === 'ok' ? 'ok' : s.alerta === 'bajo' ? 'bajo' : 'agotado';
       div.innerHTML = `
         <div class="nombre">${getTipoLabel(s.tipo)}</div>
-        <div class="dot ${alertaClass}"></div>
+        ${enRevision ? '' : `<div class="dot ${alertaClass}"></div>`}
         <div class="num">${s.cantidad}</div>
       `;
       return div;
     }),
   );
+}
+
+async function renderHistorialRevisiones() {
+  const movs = await movRepo.getAll();
+  const revisiones = movs
+    .filter(m => m.tipo === 'revision' || m.tipo === 'merma')
+    .sort((a, b) => b.fecha - a.fecha);
+
+  if (currentFilter !== 'en_revision' || revisiones.length === 0) {
+    elHistorialRevisiones.hidden = true;
+    elHistorialDetalle.hidden = true;
+    return;
+  }
+
+  elHistorialRevisiones.hidden = false;
+  histTotal = revisiones.length;
+  const totalPages = Math.max(1, Math.ceil(histTotal / histPageSize));
+  if (histPage > totalPages) histPage = totalPages;
+
+  const start = (histPage - 1) * histPageSize;
+  const page = revisiones.slice(start, start + histPageSize);
+
+  elHistContador.textContent = `Mostrando ${page.length} de ${histTotal}`;
+  elHistPagInfo.textContent = String(histPage);
+  elHistPagPrev.disabled = histPage <= 1;
+  elHistPagNext.disabled = histPage >= totalPages;
+
+  elHistorialBody.replaceChildren(
+    ...page.map(m => {
+      const router = routers.find(r => r.serial === m.routerSerial);
+      const tr = document.createElement('tr');
+      if (m.id === selectedMovId) tr.classList.add('selected');
+      tr.innerHTML = `
+        <td>${router?.lote ?? '—'}</td>
+        <td>${formatDate(m.fecha)}</td>
+        <td>${m.routerSerial}</td>
+        <td>${m.routerTipo ? getTipoLabel(m.routerTipo) : '—'}</td>
+        <td>${m.resultado === 'optimo' ? 'Revisado' : 'Merma'}</td>
+      `;
+      tr.addEventListener('click', () => {
+        selectedMovId = m.id;
+        void renderHistorialRevisiones();
+        renderHistorialDetalle(m);
+      });
+      return tr;
+    }),
+  );
+}
+
+function renderHistorialDetalle(m: Movimiento) {
+  const router = routers.find(r => r.serial === m.routerSerial);
+  elHistorialDetalle.hidden = false;
+  elHistorialDetalle.innerHTML = `
+    <div class="detalle-info">
+      <div><strong>${m.routerSerial}</strong></div>
+      <div><strong>Técnico:</strong> ${m.tecnico ?? '—'}</div>
+      <div><strong>Fabricante:</strong> ${router?.fabricante ?? '—'}</div>
+      <div><strong>Cliente:</strong> ${m.cliente ?? '—'}</div>
+      <div><strong>Fecha de retorno:</strong> ${m.fechaRetorno ? formatDate(m.fechaRetorno) : '—'}</div>
+      <div><strong>Fecha de revisión:</strong> ${formatDate(m.fecha)}</div>
+      <div><strong>Tipo:</strong> ${m.routerTipo ? getTipoLabel(m.routerTipo) : '—'}</div>
+      <div><strong>Detalle:</strong> ${m.detalle ?? '—'}</div>
+    </div>
+  `;
 }
 
 // ── Acciones ───────────────────────────────────────────
@@ -304,22 +433,32 @@ async function agregarRouter() {
 
 async function asignarCliente() {
   if (!selectedSerial) return;
-  const cliente = prompt('Nombre del cliente:');
-  if (!cliente) return;
-  try {
-    await service.asignarCliente({ serial: selectedSerial, cliente, usuario: usuarioActual });
-    await refresh();
-  } catch (e) {
-    alert(e instanceof Error ? e.message : 'Error al asignar');
-  }
+  const router = routers.find(r => r.serial === selectedSerial);
+  if (!router) return;
+  elFormDesasignar.hidden = true;
+
+  abrirClienteModal(router.clienteActual, async (data) => {
+    try {
+      await service.asignarCliente({
+        serial: selectedSerial!,
+        cliente: data.cliente,
+        motivo: data.motivo,
+        usuario: usuarioActual,
+      });
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al asignar');
+    }
+  });
 }
 
 async function registrarSalida() {
   if (!selectedSerial) return;
   const tecnico = elSalidaTecnico.value;
+  const motivo = elSalidaMotivo.value;
   if (!tecnico) { alert('Selecciona un técnico'); return; }
   try {
-    await service.registrarSalida({ serial: selectedSerial, tecnico, usuario: usuarioActual });
+    await service.registrarSalida({ serial: selectedSerial, tecnico, motivo, usuario: usuarioActual });
     selectedSerial = null;
     await refresh();
   } catch (e) {
@@ -327,11 +466,48 @@ async function registrarSalida() {
   }
 }
 
+async function desasignarTecnico() {
+  if (!selectedSerial) return;
+  if (!confirm('¿Devolver este router a oficina y quitarle el técnico?')) return;
+  try {
+    await service.desasignarTecnico({ serial: selectedSerial, usuario: usuarioActual });
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error al desasignar');
+  }
+}
+
 async function registrarRevision(resultado: 'optimo' | 'merma') {
   if (!selectedSerial) return;
   const detalle = elRevisionDetalle.value.trim() || undefined;
+  const router = routers.find(r => r.serial === selectedSerial);
+  if (!router) return;
+
+  let nuevoTipo: TipoRouter | undefined;
+
+  if (resultado === 'optimo') {
+    const pierdeCable = elPerdidaCable.checked;
+    const pierdeInternet = elPerdidaInternet.checked;
+
+    if (pierdeCable && pierdeInternet) {
+      alert('No puedes marcar ambas características como perdidas');
+      return;
+    }
+
+    if (router.tipo === 'duo') {
+      if (pierdeCable) nuevoTipo = 'internet';
+      if (pierdeInternet) nuevoTipo = 'cable';
+    }
+  }
+
   try {
-    await service.registrarRevision({ serial: selectedSerial, resultado, detalle, usuario: usuarioActual });
+    await service.registrarRevision({
+      serial: selectedSerial,
+      resultado,
+      detalle,
+      nuevoTipo,
+      usuario: usuarioActual,
+    });
     selectedSerial = null;
     await refresh();
   } catch (e) {
@@ -339,5 +515,6 @@ async function registrarRevision(resultado: 'optimo' | 'merma') {
   }
 }
 
+
 // ── Arranque ───────────────────────────────────────────
-init();
+void init();
