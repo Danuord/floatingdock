@@ -1,13 +1,15 @@
 // src/domain/services/router-service.ts
-import type { Router, TipoRouter, EstadoRouter } from '../entities/router';
 import type { Movimiento, TipoMovimiento } from '../entities/movimiento';
 import type { RouterRepository } from '../repositories/router-repository';
 import type { MovimientoRepository } from '../repositories/movimiento-repository';
+import type { Router, TipoRouter, EstadoRouter, Agencia } from '../entities/router';
 
 export class RouterService {
   constructor(
     private routers: RouterRepository,
     private movimientos: MovimientoRepository,
+    private getRouterRepo: (a: Agencia) => RouterRepository,
+    private getMovRepo: (a: Agencia) => MovimientoRepository,
   ) {}
 
   private async registrar(
@@ -22,6 +24,7 @@ export class RouterService {
       routerSerial: router.serial,
       routerTipo: router.tipo,
       fecha: Date.now(),
+      agencia: router.agencia,
       usuario,
       ...extra,
     };
@@ -36,6 +39,7 @@ export class RouterService {
     tecnologia?: string;
     lote?: string;
     usuario: string;
+    agencia: Agencia;
   }): Promise<Router> {
     const yaExiste = await this.routers.getBySerial(params.serial);
     if (yaExiste) throw new Error(`Serial ${params.serial} ya existe`);
@@ -47,6 +51,7 @@ export class RouterService {
       tipo: params.tipo,
       estado: 'nuevo',
       ubicacion: 'oficina',
+      agencia: params.agencia,
       fabricante: params.fabricante,
       tecnologia: params.tecnologia,
       lote: params.lote,
@@ -69,6 +74,7 @@ export class RouterService {
     motivo: string;
     destino: 'optimo' | 'a_revisar';
     usuario: string;
+     agencia: Agencia;
   }): Promise<Router> {
     const ahora = Date.now();
     let router = await this.routers.getBySerial(params.serial);
@@ -90,6 +96,7 @@ export class RouterService {
         tipo: params.tipo,
         estado: nuevoEstado,
         ubicacion: 'oficina',
+        agencia: params.agencia,
         fabricante: params.fabricante,
         clienteActual: params.cliente,
         tecnicoActual: params.tecnico,
@@ -214,5 +221,110 @@ export class RouterService {
       fechaRetorno: ultimoRetorno?.fecha,
     });
     return router;
+  }
+
+  async transferirALomasMasivo(params: {
+    seriales: string[];
+    usuario: string;
+  }): Promise<{ exitosos: number; fallidos: number }> {
+    const { pushBatch } = await import('../../infrastructure/storage/sheets-sync');
+    const batch: any[] = [];
+    let exitosos = 0;
+
+    for (const serial of params.seriales) {
+      const router = await this.routers.getBySerial(serial);
+      if (!router) continue;
+
+      router.agencia = 'lomas';
+      router.ubicacion = null;
+      router.actualizadoEn = Date.now();
+      await this.routers.save(router);
+
+      const mov: Movimiento = {
+        id: crypto.randomUUID(),
+        tipo: 'transferencia_lomas',
+        routerSerial: router.serial,
+        routerTipo: router.tipo,
+        agencia: 'lomas',
+        usuario: params.usuario,
+        fecha: Date.now(),
+      };
+
+      const clon: Router = {
+        ...router,
+        id: crypto.randomUUID(),
+        agencia: 'lomas',
+        ubicacion: 'oficina',
+        creadoEn: Date.now(),
+        actualizadoEn: Date.now(),
+      };
+
+      const movEspejo: Movimiento = {
+        id: crypto.randomUUID(),
+        tipo: 'entrada_lomas',
+        routerSerial: clon.serial,
+        routerTipo: clon.tipo,
+        agencia: 'paraiso',
+        usuario: params.usuario,
+        fecha: Date.now(),
+      };
+
+      batch.push(
+        { router, agencia: 'paraiso' },
+        { movimiento: mov, agencia: 'paraiso' },
+        { router: clon, agencia: 'lomas' },
+        { movimiento: movEspejo, agencia: 'lomas' },
+      );
+      exitosos++;
+    }
+
+    if (batch.length > 0) await pushBatch(batch);
+    return { exitosos, fallidos: params.seriales.length - exitosos };
+  }
+
+  async transferirALomas(params: {
+    serial: string;
+    usuario: string;
+    tecnico?: string;
+  }): Promise<void> {
+    const router = await this.routers.getBySerial(params.serial);
+    if (!router) throw new Error(`Serial ${params.serial} no existe`);
+
+    router.agencia = 'lomas';
+    router.ubicacion = null;
+    router.tecnicoActual = params.tecnico;
+    router.actualizadoEn = Date.now();
+    await this.routers.save(router);
+
+    await this.registrar('transferencia_lomas', router, params.usuario, {
+      agencia: 'lomas',
+      tecnico: params.tecnico,
+    });
+
+    const routerLomas = this.getRouterRepo('lomas');
+    const movLomas = this.getMovRepo('lomas');
+    const ahora = Date.now();
+    const clon: Router = {
+      ...router,
+      id: crypto.randomUUID(),
+      agencia: 'lomas',
+      ubicacion: params.tecnico ? 'campo' : 'oficina',
+      tecnicoActual: params.tecnico,
+      creadoEn: ahora,
+      actualizadoEn: ahora,
+    };
+    await routerLomas.save(clon);
+
+    const movEspejo: Movimiento = {
+      id: crypto.randomUUID(),
+      tipo: 'entrada_lomas',
+      routerSerial: clon.serial,
+      routerTipo: clon.tipo,
+      agencia: 'paraiso',
+      tecnico: params.tecnico,
+      usuario: params.usuario,
+      fecha: ahora,
+    };
+    await movLomas.save(movEspejo);
   }
 }

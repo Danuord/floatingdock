@@ -1,6 +1,6 @@
 // src/domain/services/stock-calculator.ts
-import type { Router, TipoRouter } from '../entities/router';
 import { UMBRALES_STOCK } from '../entities/tecnicos';
+import type { Router, TipoRouter, Agencia } from '../entities/router';
 
 export type AlertaStock = 'ok' | 'bajo' | 'agotado';
 
@@ -10,14 +10,19 @@ export interface StockPorTipo {
   alerta: AlertaStock;
 }
 
-export function calcularStockPorTipo(routers: Router[]): StockPorTipo[] {
-  // Solo cuentan los que están en oficina y no están dañados
-  const enOficina = routers.filter(
-    r => r.ubicacion === 'oficina' && (r.estado === 'nuevo' || r.estado === 'optimo'),
+export function calcularStockPorTipo(
+  routers: Router[],
+  estado: 'nuevo' | 'optimo',
+  agencia: Agencia,
+): StockPorTipo[] {
+  const filtrados = routers.filter(
+    r => r.estado === estado
+      && r.agencia === agencia
+      && r.ubicacion === 'oficina',
   );
 
   return (Object.keys(UMBRALES_STOCK) as TipoRouter[]).map(tipo => {
-    const cantidad = enOficina.filter(r => r.tipo === tipo).length;
+    const cantidad = filtrados.filter(r => r.tipo === tipo).length;
     const { bajo, minimo } = UMBRALES_STOCK[tipo];
 
     let alerta: AlertaStock = 'ok';

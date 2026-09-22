@@ -52,7 +52,15 @@ export function abrirModal(opts: ModalOptions): () => void {
     btnAceptar.className = 'btn-primary';
     btnAceptar.textContent = opts.textoAceptar ?? 'Guardar';
     btnAceptar.addEventListener('click', async () => {
-      if (opts.onAceptar) await opts.onAceptar();
+      if (btnAceptar.disabled) return;
+      btnAceptar.disabled = true;
+      btnAceptar.textContent = 'Guardando...';
+      try {
+        if (opts.onAceptar) await opts.onAceptar();
+      } finally {
+        btnAceptar.disabled = false;
+        btnAceptar.textContent = opts.textoAceptar ?? 'Guardar';
+      }
     });
 
     footer.append(btnCancelar, btnAceptar);

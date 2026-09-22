@@ -8,6 +8,10 @@
   <body>
     <header class="top-bar">
       <select id="usuario-actual" title="Usuario actual"></select>
+      <select id="agencia-actual" title="Agencia">
+        <option value="paraiso">Paraíso</option>
+        <option value="lomas">Lomas</option>
+      </select>
       <button id="btn-exportar" type="button">Exportar</button>
     </header>
 
@@ -32,9 +36,16 @@
         <input id="buscar-serial" type="search" placeholder="Buscar por serial" />
       </div>
 
+      <div id="barra-multiple" class="barra-multiple" hidden>
+        <span id="multi-contador">0 seleccionados</span>
+        <button id="btn-enviar-lomas-multi" type="button">Enviar a Lomas</button>
+        <button id="btn-limpiar-multi" type="button">Limpiar</button>
+      </div>
+
       <table class="tabla">
         <thead>
           <tr>
+            <th style="width:24px;"><input type="checkbox" id="check-all" /></th>
             <th>Lote</th>
             <th>Fecha ingreso</th>
             <th>Serial</th>
@@ -88,6 +99,7 @@
       <select id="salida-motivo">
         <option value="Instalación">Instalación</option>
         <option value="Avería">Avería</option>
+        <option value="Lomas">Lomas</option>
       </select>
     </div>
     <button id="btn-registrar-salida" type="button">Registrar</button>

@@ -9,11 +9,18 @@ import { abrirNuevoModal } from './views/modals/nuevo-modal';
 import { abrirRetornoModal } from './views/modals/retorno-modal';
 import { Movimiento } from '../domain/entities/movimiento';
 import { abrirClienteModal } from './views/modals/cliente-modal';
+import type { Agencia } from '../domain/entities/router';
 
 // ── Instancias ─────────────────────────────────────────
-const routerRepo = new ChromeRouterRepository();
-const movRepo = new ChromeMovimientoRepository();
-const service = new RouterService(routerRepo, movRepo);
+let agenciaActual: Agencia = 'paraiso';
+let routerRepo = new ChromeRouterRepository(agenciaActual);
+let movRepo = new ChromeMovimientoRepository(agenciaActual);
+const service = new RouterService(
+  { getAll: () => routerRepo.getAll(), getBySerial: s => routerRepo.getBySerial(s), save: r => routerRepo.save(r), delete: id => routerRepo.delete(id) },
+  { getAll: () => movRepo.getAll(), getBySerial: s => movRepo.getBySerial(s), save: m => movRepo.save(m) },
+  (a) => new ChromeRouterRepository(a),
+  (a) => new ChromeMovimientoRepository(a),
+);
 const elHistorialRevisiones = document.querySelector<HTMLDivElement>('#historial-revisiones')!;
 const elHistorialBody = document.querySelector<HTMLTableSectionElement>('#historial-body')!;
 const elHistorialDetalle = document.querySelector<HTMLDivElement>('#historial-detalle')!;
@@ -23,7 +30,7 @@ const elPerdidaInternet = document.querySelector<HTMLInputElement>('#perdida-int
 const elSalidaMotivo = document.querySelector<HTMLSelectElement>('#salida-motivo')!;
 const elFormDesasignar = document.querySelector<HTMLDivElement>('#form-desasignar')!;
 const elBtnDesasignar = document.querySelector<HTMLButtonElement>('#btn-desasignar')!;
-
+const elAgencia = document.querySelector<HTMLSelectElement>('#agencia-actual')!;
 
 // ── Estado ─────────────────────────────────────────────
 let routers: Router[] = [];
@@ -53,8 +60,10 @@ function getEstadoLabel(e: EstadoRouter): string {
   }[e];
 }
 
-function getUbicacionLabel(u: 'oficina' | 'campo'): string {
-  return u === 'oficina' ? 'Oficina' : 'Campo';
+function getUbicacionLabel(u: 'oficina' | 'campo' | null): string {
+  if (u === 'oficina') return 'Oficina';
+  if (u === 'campo') return 'Campo';
+  return '—';
 }
 
 function setToday(input: HTMLInputElement) {
@@ -96,44 +105,45 @@ const elHistPagNext = document.querySelector<HTMLButtonElement>('#hist-pag-next'
 let histPage = 1;
 let histTotal = 0;
 const histPageSize = 10;
+const elBarraMultiple = document.querySelector<HTMLDivElement>('#barra-multiple')!;
+const elMultiContador = document.querySelector<HTMLSpanElement>('#multi-contador')!;
+const elBtnEnviarLomasMulti = document.querySelector<HTMLButtonElement>('#btn-enviar-lomas-multi')!;
+const elBtnLimpiarMulti = document.querySelector<HTMLButtonElement>('#btn-limpiar-multi')!;
+const elCheckAll = document.querySelector<HTMLInputElement>('#check-all')!;
+let seleccionMultiple = new Set<string>();
 
 // ── Inicialización ─────────────────────────────────────
 async function init() {
-
-    try {
-      const { pullTodo } = await import('../infrastructure/storage/sheets-sync');
-      const { routers: r, movimientos: m } = await pullTodo();
-      await chrome.storage.local.set({ routers: r, movimientos: m });
-    } catch (e) {
-      console.warn('Sin conexión a Sheets, usando caché local', e);
-    }
-  // Poblar usuario
-  elUsuario.replaceChildren(
-    ...USUARIOS.map(u => new Option(u, u)),
-  );
+  // 1. Configurar UI (dropdowns, listeners) sin esperar red
+  elUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
   elUsuario.value = usuarioActual;
-  elUsuario.addEventListener('change', () => {
-    usuarioActual = elUsuario.value;
+  elUsuario.addEventListener('change', () => { usuarioActual = elUsuario.value; });
+
+  elAgencia.value = agenciaActual;
+  elAgencia.addEventListener('change', async () => {
+    agenciaActual = elAgencia.value as Agencia;
+    routerRepo = new ChromeRouterRepository(agenciaActual);
+    movRepo = new ChromeMovimientoRepository(agenciaActual);
+    selectedSerial = null;
+    selectedMovId = null;
+    seleccionMultiple.clear();
+    await refresh();
+    void sincronizarConSheets();
   });
 
-  // Poblar técnicos
-  elSalidaTecnico.replaceChildren(
-    ...TECNICOS.map(t => new Option(t, t)),
-  );
-
-  // Fechas por defecto
+  elSalidaTecnico.replaceChildren(...TECNICOS.map(t => new Option(t, t)));
   setToday(elSalidaFecha);
   setToday(elRevisionFecha);
 
-  // Event listeners
   elFiltro.addEventListener('change', () => {
     currentFilter = elFiltro.value as EstadoRouter;
     currentPage = 1;
     selectedSerial = null;
     histPage = 1;
     selectedMovId = null;
-    actualizarBotonAgregar(); 
+    actualizarBotonAgregar();
     refresh();
+    seleccionMultiple.clear();
   });
 
   elBuscar.addEventListener('input', () => {
@@ -151,23 +161,6 @@ async function init() {
     if (currentPage < totalPages) { currentPage++; renderTabla(); }
   });
 
-  elBtnAgregar.addEventListener('click', agregarRouter);
-  elBtnAsignarCliente.addEventListener('click', asignarCliente);
-  elBtnRegistrarSalida.addEventListener('click', registrarSalida);
-  elBtnRegistrarRevision.addEventListener('click', () => registrarRevision('optimo'));
-  elBtnRegistrarMerma.addEventListener('click', () => registrarRevision('merma'));
-
-  elBtnExportar.addEventListener('click', () => alert('Exportar próximamente'));
-
-  elBtnDesasignar.addEventListener('click', desasignarTecnico);
-
-  // Escuchar cambios en storage
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && (changes.routers || changes.movimientos)) {
-      refresh();
-    }
-  });
-
   elHistPagPrev.addEventListener('click', () => {
     if (histPage > 1) { histPage--; void renderHistorialRevisiones(); }
   });
@@ -176,21 +169,83 @@ async function init() {
     if (histPage < total) { histPage++; void renderHistorialRevisiones(); }
   });
 
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes['scanner-result']) return;
-     if (document.querySelector('.modal-overlay')) return;
-
-    const { codigo } = changes['scanner-result'].newValue as { codigo: string };
-    elBuscar.value = codigo;
-    currentSearch = codigo.trim().toLowerCase();
-    currentPage = 1;
+  elBtnLimpiarMulti.addEventListener('click', () => {
+    seleccionMultiple.clear();
     renderTabla();
-    void chrome.storage.local.remove('scanner-result');
-    }
-);
+  });
 
-  refresh();
-  
+  elBtnEnviarLomasMulti.addEventListener('click', enviarLomasMasivo);
+
+  elCheckAll.addEventListener('change', () => {
+    const page = paginatedRouters();
+    if (elCheckAll.checked) {
+      page.forEach(r => seleccionMultiple.add(r.serial));
+    } else {
+      page.forEach(r => seleccionMultiple.delete(r.serial));
+    }
+    renderTabla();
+  });
+
+  elBtnAgregar.addEventListener('click', agregarRouter);
+  elBtnAsignarCliente.addEventListener('click', asignarCliente);
+  elBtnRegistrarSalida.addEventListener('click', registrarSalida);
+  elBtnDesasignar.addEventListener('click', desasignarTecnico);
+  elBtnRegistrarRevision.addEventListener('click', () => registrarRevision('optimo'));
+  elBtnRegistrarMerma.addEventListener('click', () => registrarRevision('merma'));
+  elBtnExportar.addEventListener('click', () => alert('Exportar próximamente'));  
+
+  let refreshTimer: number | null = null;
+  function refreshDebounced() {
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = null;
+      void refresh();
+    }, 150);
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const keyRouters = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
+    const keyMovs = agenciaActual === 'lomas' ? 'movimientosLomas' : 'movimientos';
+    if (!changes[keyRouters] && !changes[keyMovs]) return;
+    refreshDebounced();
+  });
+
+  // 2. Render inmediato con caché local
+  await refresh();
+
+  // 3. Sincronización en segundo plano (no bloquea la UI)
+  void sincronizarConSheets();
+
+  setInterval(() => { void sincronizarConSheets(); }, 60_000);
+}
+
+async function enviarLomasMasivo() {
+  if (seleccionMultiple.size === 0) return;
+  const seriales = Array.from(seleccionMultiple);
+  if (!confirm(`¿Enviar ${seriales.length} router(s) a Lomas?`)) return;
+
+  try {
+    await service.transferirALomasMasivo({ seriales, usuario: usuarioActual });
+    seleccionMultiple.clear();
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error');
+  }
+}
+
+async function sincronizarConSheets() {
+    try {
+    const { pullTodo, hayPendientes } = await import('../infrastructure/storage/sheets-sync');
+    if (hayPendientes()) return;   // ← no pisar mientras haya push en curso
+    const { routers: r, movimientos: m } = await pullTodo(agenciaActual);
+    const keyRouters = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
+    const keyMovs = agenciaActual === 'lomas' ? 'movimientosLomas' : 'movimientos';
+    await chrome.storage.local.set({ [keyRouters]: r, [keyMovs]: m });
+    // El storage.onChanged ya dispara refresh()
+  } catch (e) {
+    console.debug('Sin conexión a Sheets', e);
+  }
 }
 
 // ── Datos ──────────────────────────────────────────────
@@ -252,17 +307,42 @@ function renderTabla() {
   elPagPrev.disabled = currentPage <= 1;
   elPagNext.disabled = currentPage >= totalPages;
 
+  const puedeSeleccionarMultiple = currentFilter === 'nuevo' && agenciaActual === 'paraiso';
+
   elTablaBody.replaceChildren(
     ...page.map(r => {
       const tr = document.createElement('tr');
       if (r.serial === selectedSerial) tr.classList.add('selected');
-      tr.innerHTML = `
-        <td>${r.lote ?? '—'}</td>
-        <td>${formatDate(r.fechaIngreso)}</td>
-        <td>${r.serial}</td>
-        <td>${getTipoLabel(r.tipo)}</td>
-        <td>${getEstadoLabel(r.estado)}</td>
-      `;
+
+      const tdCheck = document.createElement('td');
+      if (puedeSeleccionarMultiple) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = seleccionMultiple.has(r.serial);
+        cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          if (cb.checked) seleccionMultiple.add(r.serial);
+          else seleccionMultiple.delete(r.serial);
+          renderTabla();
+          renderDetalle();
+        });
+        tdCheck.append(cb);
+      }
+      tr.append(tdCheck);
+
+      const tdLote = document.createElement('td');
+      tdLote.textContent = r.lote ?? '—';
+      const tdFecha = document.createElement('td');
+      tdFecha.textContent = formatDate(r.fechaIngreso);
+      const tdSerial = document.createElement('td');
+      tdSerial.textContent = r.serial;
+      const tdTipo = document.createElement('td');
+      tdTipo.textContent = getTipoLabel(r.tipo);
+      const tdEstado = document.createElement('td');
+      tdEstado.textContent = getEstadoLabel(r.estado);
+
+      tr.append(tdLote, tdFecha, tdSerial, tdTipo, tdEstado);
+
       tr.addEventListener('click', () => {
         selectedSerial = r.serial;
         renderTabla();
@@ -271,9 +351,41 @@ function renderTabla() {
       return tr;
     }),
   );
+
+  // Barra múltiple
+  const n = seleccionMultiple.size;
+  if (n > 0) {
+    elBarraMultiple.hidden = false;
+    elMultiContador.textContent = `${n} seleccionado${n > 1 ? 's' : ''}`;
+  } else {
+    elBarraMultiple.hidden = true;
+  }
+
+  // Check "todos"
+  if (puedeSeleccionarMultiple && page.length > 0) {
+    elCheckAll.disabled = false;
+    elCheckAll.checked = page.every(r => seleccionMultiple.has(r.serial));
+  } else {
+    elCheckAll.disabled = true;
+    elCheckAll.checked = false;
+  }
 }
 
 async function renderDetalle() {
+    if (seleccionMultiple.size > 0) {
+    elDetalleInfo.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center;">
+        <strong>${seleccionMultiple.size} router${seleccionMultiple.size > 1 ? 's' : ''} seleccionado${seleccionMultiple.size > 1 ? 's' : ''}</strong><br>
+        <span style="font-size:10px;color:#666;">Usa los botones de arriba para enviarlos a Lomas</span>
+      </div>
+    `;
+    elFormSalida.hidden = true;
+    elFormRevision.hidden = true;
+    elBtnAsignarCliente.hidden = true;
+    elFormDesasignar.hidden = true;
+    return;
+  }
+
   const router = selectedSerial ? routers.find(r => r.serial === selectedSerial) : null;
 
   if (!router) {
@@ -301,6 +413,7 @@ async function renderDetalle() {
     <div><strong>Fecha de ingreso:</strong> ${formatDate(router.fechaIngreso)}</div>
     <div><strong>Tipo:</strong> ${getTipoLabel(router.tipo)}</div>
     <div><strong>Ubicación:</strong> ${getUbicacionLabel(router.ubicacion)}</div>
+    <div><strong>Agencia:</strong> ${router.agencia === 'paraiso' ? 'Paraíso' : 'Lomas'}</div>
     <div><strong>Tecnología:</strong> ${router.tecnologia ?? '—'}</div>
   `;
 
@@ -325,7 +438,11 @@ function renderStock() {
   const enRevision = currentFilter === 'en_revision';
   const stock: StockPorTipo[] = enRevision
     ? calcularEnRevision(routers)
-    : calcularStockPorTipo(routers);
+    : calcularStockPorTipo(
+        routers,
+        currentFilter as 'nuevo' | 'optimo',
+        agenciaActual,
+      );
 
   elStockLista.replaceChildren(
     ...stock.map(s => {
@@ -411,7 +528,7 @@ async function agregarRouter() {
   if (currentFilter === 'nuevo') {
     abrirNuevoModal(async (data) => {
       try {
-        await service.registrarNuevo({ ...data, usuario: usuarioActual });
+        await service.registrarNuevo({ ...data, usuario: usuarioActual, agencia: agenciaActual });
         await refresh();
       } catch (e) {
         alert(e instanceof Error ? e.message : 'Error al registrar');
@@ -422,7 +539,7 @@ async function agregarRouter() {
     const destino = currentFilter === 'optimo' ? 'optimo' : 'a_revisar';
     abrirRetornoModal(destino, async (data) => {
       try {
-        await service.registrarRetorno({ ...data, usuario: usuarioActual });
+        await service.registrarRetorno({ ...data, usuario: usuarioActual, agencia: agenciaActual });
         await refresh();
       } catch (e) {
         alert(e instanceof Error ? e.message : 'Error al registrar retorno');
@@ -458,11 +575,19 @@ async function registrarSalida() {
   const motivo = elSalidaMotivo.value;
   if (!tecnico) { alert('Selecciona un técnico'); return; }
   try {
-    await service.registrarSalida({ serial: selectedSerial, tecnico, motivo, usuario: usuarioActual });
+    if (motivo === 'Lomas') {
+      await service.transferirALomas({
+        serial: selectedSerial,
+        usuario: usuarioActual,
+        tecnico,
+      });
+    } else {
+      await service.registrarSalida({ serial: selectedSerial, tecnico, motivo, usuario: usuarioActual });
+    }
     selectedSerial = null;
     await refresh();
   } catch (e) {
-    alert(e instanceof Error ? e.message : 'Error al registrar salida');
+    alert(e instanceof Error ? e.message : 'Error');
   }
 }
 

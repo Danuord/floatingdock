@@ -24,7 +24,10 @@ export type EstadoRouter = 'nuevo' | 'optimo' | 'en_revision' | 'dañado';
  * Un router 'optimo' puede estar en oficina o en campo.
  * Por eso son dos campos separados.
  */
-export type UbicacionRouter = 'oficina' | 'campo';
+export type UbicacionRouter = 'oficina' | 'campo' | null;
+
+/* Agencia o paraíso o lomas*/
+export type Agencia = 'paraiso' | 'lomas';
 
 /**
  * Un Router es UN equipo físico individual.
@@ -45,6 +48,9 @@ export interface Router {
 
   /** Dónde está físicamente */
   ubicacion: UbicacionRouter;
+
+  /** Agencia donde está actualmente*/
+  agencia: Agencia;
 
   // ─── Datos del equipo ───────────────────────────────
   /** Fabricante: Optictimes, ZTE, Huawei... */

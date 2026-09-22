@@ -1,5 +1,6 @@
 // src/domain/entities/movimiento.ts
 import type { TipoRouter } from './router';
+import type { Agencia } from './router';
 
 export type TipoMovimiento =
   | 'registro_nuevo'
@@ -8,7 +9,9 @@ export type TipoMovimiento =
   | 'asignacion_cliente'
   | 'revision'
   | 'merma'
-  | 'desasignacion';
+  | 'desasignacion'
+  | 'transferencia_lomas'
+  | 'entrada_lomas';
 
 export interface Movimiento {
   id: string;
@@ -26,4 +29,5 @@ export interface Movimiento {
 
   fecha: number;
   usuario: string;
+  agencia: Agencia;
 }

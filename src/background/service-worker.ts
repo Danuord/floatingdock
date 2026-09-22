@@ -370,7 +370,8 @@ chrome.runtime.onMessage.addListener(
       try {
         let res: Response;
         if (req.accion === 'getAll') {
-          res = await fetch(SHEETS_URL);
+          const agencia = (req.payload as { agencia?: string })?.agencia ?? 'paraiso';
+          res = await fetch(`${SHEETS_URL}?agencia=${agencia}`);
         } else {
           res = await fetch(SHEETS_URL, {
             method: 'POST',

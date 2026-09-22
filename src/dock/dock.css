@@ -328,3 +328,32 @@ body {
 .historial-detalle[hidden] {
   display: none !important;
 }
+
+.barra-multiple {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #036;
+  color: #fff;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.barra-multiple[hidden] { display: none !important; }
+.barra-multiple button {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background: #fff;
+  color: #036;
+}
+.barra-multiple span { flex: 1; }
+
+.tabla th input[type="checkbox"],
+.tabla td input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
