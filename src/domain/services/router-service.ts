@@ -74,19 +74,34 @@ export class RouterService {
     motivo: string;
     destino: 'optimo' | 'a_revisar';
     usuario: string;
-     agencia: Agencia;
+    agencia: Agencia;
   }): Promise<Router> {
     const ahora = Date.now();
     let router = await this.routers.getBySerial(params.serial);
 
+    if (router) {
+      const todos = (await this.routers.getAll()).filter(r => r.serial === params.serial);
+      if (todos.length > 1) {
+        const original = todos.find(r => r.agencia === 'lomas' && r.ubicacion === null);
+        router = original ?? todos.sort((a, b) => b.actualizadoEn - a.actualizadoEn)[0];
+      }
+    }
+
     const nuevoEstado: EstadoRouter =
       params.destino === 'optimo' ? 'optimo' : 'en_revision';
+
+    // Detectamos si viene de Lomas (por si hay clon allá)
+    const routerLomasRepo = this.getRouterRepo('lomas');
+    const movLomasRepo = this.getMovRepo('lomas');
+    const clonLomas = await routerLomasRepo.getBySerial(params.serial);
+    const agenciaOrigen: Agencia = clonLomas ? 'lomas' : 'paraiso';
 
     if (router) {
       router.estado = nuevoEstado;
       router.ubicacion = 'oficina';
       router.clienteActual = params.cliente;
       router.tecnicoActual = params.tecnico;
+      router.agencia = params.agencia;
       if (params.fabricante) router.fabricante = params.fabricante;
       router.actualizadoEn = ahora;
     } else {
@@ -111,7 +126,28 @@ export class RouterService {
       tecnico: params.tecnico,
       motivo: params.motivo,
       destino: params.destino,
+      agenciaOrigen,
     });
+
+    // Si estaba en Lomas, eliminar el clon y registrar movimiento espejo
+    if (clonLomas) {
+      await routerLomasRepo.delete(clonLomas.id);
+      const movEspejo: Movimiento = {
+        id: crypto.randomUUID(),
+        tipo: 'retorno',
+        routerSerial: router.serial,
+        routerTipo: router.tipo,
+        agencia: 'paraiso',
+        usuario: params.usuario,
+        cliente: params.cliente,
+        tecnico: params.tecnico,
+        motivo: params.motivo,
+        destino: params.destino,
+        fecha: ahora,
+      };
+      await movLomasRepo.save(movEspejo);
+    }
+
     return router;
   }
 
@@ -191,6 +227,12 @@ export class RouterService {
 
     const clienteSnapshot = router.clienteActual;
     const tecnicoSnapshot = router.tecnicoActual;
+
+    let caracteristicaPerdida: 'cable' | 'internet' | undefined;
+      if (params.nuevoTipo && params.nuevoTipo !== router.tipo) {
+        if (router.tipo === 'duo' && params.nuevoTipo === 'internet') caracteristicaPerdida = 'cable';
+        if (router.tipo === 'duo' && params.nuevoTipo === 'cable') caracteristicaPerdida = 'internet';
+      }
     const tipoOriginal = router.tipo;
 
     const movs = await this.movimientos.getBySerial(params.serial);
@@ -219,6 +261,7 @@ export class RouterService {
       cliente: clienteSnapshot,
       tecnico: tecnicoSnapshot,
       fechaRetorno: ultimoRetorno?.fecha,
+      caracteristicaPerdida,
     });
     return router;
   }

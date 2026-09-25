@@ -95,8 +95,17 @@ async function hacerPull(agencia: Agencia): Promise<{ routers: Router[]; movimie
     r => !serialesRemotos.has(r.serial) && r.agencia === agencia,
   );
 
+  const combinados = [...fusionados, ...soloLocales];
+  const mapaFinal = new Map<string, Router>();
+  combinados.forEach(r => {
+    const prev = mapaFinal.get(r.serial);
+    if (!prev || r.actualizadoEn > prev.actualizadoEn) {
+      mapaFinal.set(r.serial, r);
+    }
+  });
+
   return {
-    routers: [...fusionados, ...soloLocales],
+    routers: Array.from(mapaFinal.values()),
     movimientos: movsRemotos,
   };
 }
@@ -158,4 +167,15 @@ export async function pushBatch(items: BatchItem[]): Promise<void> {
     payload: { upserts, movimientos },
   });
   if (!res.ok) console.error('pushBatch falló:', res.error);
+}
+
+export function deleteRouterRemoto(id: string, agencia: Agencia): Promise<void> {
+  return encolar(async () => {
+    const res = await intentarConRetry({
+      type: 'SHEETS',
+      accion: 'deleteRouter' as any,
+      payload: { id, agencia },
+    });
+    if (!res.ok) console.error('deleteRouter falló:', res.error);
+  });
 }

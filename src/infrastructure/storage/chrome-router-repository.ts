@@ -27,15 +27,18 @@ export class ChromeRouterRepository implements RouterRepository {
 
   async save(router: Router): Promise<void> {
     const all = await this.getAll();
-    const idx = all.findIndex(r => r.id === router.id);
-    if (idx >= 0) all[idx] = router;
-    else all.push(router);
-    await chrome.storage.local.set({ [this.key]: all });
+    const limpio = all.filter(r => r.serial !== router.serial || r.id === router.id);
+    const idx = limpio.findIndex(r => r.id === router.id);
+    if (idx >= 0) limpio[idx] = router;
+    else limpio.push(router);
+    await chrome.storage.local.set({ [this.key]: limpio });
     void pushRouter(router, this.agencia);
   }
 
   async delete(id: string): Promise<void> {
     const all = await this.getAll();
     await chrome.storage.local.set({ [this.key]: all.filter(r => r.id !== id) });
+    const { deleteRouterRemoto } = await import('./sheets-sync');
+    void deleteRouterRemoto(id, this.agencia);
   }
 }

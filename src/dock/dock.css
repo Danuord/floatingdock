@@ -357,3 +357,120 @@ body {
   margin: 0;
   cursor: pointer;
 }
+
+.btn-copy {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px 3px;
+  margin-left: 4px;
+  color: #666;
+  vertical-align: middle;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+}
+.btn-copy:hover { background: #eee; color: #036; }
+.btn-copy.copiado { color: #2ecc71; }
+
+.tabla-header-acciones {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.tabla-header-acciones input {
+  font-size: 10px;
+  padding: 2px 6px;
+  width: 120px;
+}
+#btn-filtros {
+  font-size: 12px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 3px;
+}
+#btn-filtros.activo {
+  background: #036;
+  color: #fff;
+  border-color: #036;
+}
+
+.chips-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 6px 0;
+}
+.chips-filtros[hidden] { display: none !important; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background: #036;
+  color: #fff;
+  font-size: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.chip:hover { background: #c0392b; }
+.chip .x {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.chip:hover .x { opacity: 1; }
+.chip.chip-limpiar {
+  background: #666;
+}
+.chip.chip-limpiar:hover { background: #444; }
+
+.page-size-select {
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.accordion {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  background: #f0f0f0;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  color: #222;
+}
+.accordion-header:hover { background: #e4e4e4; }
+.accordion-header .arrow {
+  font-size: 9px;
+  color: #666;
+  transition: transform 0.15s ease;
+}
+.accordion.abierto .accordion-header .arrow {
+  transform: rotate(180deg);
+}
+.accordion-panel {
+  display: none;
+  padding: 8px 10px;
+}
+.accordion.abierto .accordion-panel {
+  display: block;
+}

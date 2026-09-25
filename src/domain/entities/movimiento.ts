@@ -26,6 +26,8 @@ export interface Movimiento {
   detalle?: string;
   resultado?: 'optimo' | 'merma';
   fechaRetorno?: number;
+  agenciaOrigen?: Agencia;
+  caracteristicaPerdida?: 'cable' | 'internet';
 
   fecha: number;
   usuario: string;
