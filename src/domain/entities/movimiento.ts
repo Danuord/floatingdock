@@ -11,7 +11,8 @@ export type TipoMovimiento =
   | 'merma'
   | 'desasignacion'
   | 'transferencia_lomas'
-  | 'entrada_lomas';
+  | 'entrada_lomas'
+  | 'importacion_optimo';
 
 export interface Movimiento {
   id: string;

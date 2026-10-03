@@ -18,6 +18,7 @@ export const USUARIOS: string[] = [
   'Anahi',
   'Rosmery',
   'Renzo',
+  'Yaqueli',
 ];
 
 /** Umbrales de stock por tipo de router. */

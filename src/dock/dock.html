@@ -5,41 +5,65 @@
     <title>InventorySide</title>
     <link rel="stylesheet" href="dock.css" />
   </head>
+
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-box">
+      <h2>InventorySide</h2>
+      <p class="login-sub">Inicia sesión para continuar</p>
+      <select id="login-usuario"></select>
+      <input id="login-pin" type="password" inputmode="numeric" placeholder="PIN" maxlength="8" />
+      <p id="login-error" class="login-error"></p>
+      <button id="login-btn" type="button">Entrar</button>
+      <button id="btn-ir-cambiar-pin" type="button" class="link-mini">Cambiar PIN</button>
+    </div>
+    <div id="cambiar-pin-box" class="login-box" hidden>
+      <h2>Cambiar PIN</h2>
+      <select id="cp-usuario"></select>
+      <input id="cp-pin-viejo" type="password" inputmode="numeric" placeholder="PIN actual" maxlength="8" />
+      <input id="cp-pin-nuevo" type="password" inputmode="numeric" placeholder="PIN nuevo" maxlength="8" />
+      <input id="cp-pin-confirmar" type="password" inputmode="numeric" placeholder="Confirmar PIN nuevo" maxlength="8" />
+      <p id="cp-error" class="login-error"></p>
+      <button id="cp-guardar" type="button">Guardar</button>
+      <button id="cp-volver" type="button" class="link-mini">Volver</button>
+    </div>
+  </div>
+
   <body>
-    <header class="top-bar">
-      <select id="usuario-actual" title="Usuario actual"></select>
-      <select id="agencia-actual" title="Agencia">
-        <option value="paraiso">Paraíso</option>
-        <option value="lomas">Lomas</option>
-      </select>
-      <button id="btn-exportar" type="button">Exportar</button>
-    </header>
+  <nav class="tabs">
+    <button class="tab active" data-tab="routers">Routers</button>
+    <button class="tab" data-tab="materiales" disabled>Materiales</button>
+    <button class="tab" data-tab="ferreteria" disabled>Ferretería</button>
+    <div class="agent-info">
+      <span class="status-dot"></span>
+      <strong id="usuario-label"></strong>
+    </div>
+  </nav>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="routers">Routers</button>
-      <button class="tab" data-tab="materiales" disabled>Materiales</button>
-      <button class="tab" data-tab="ferreteria" disabled>Ferretería</button>
-    </nav>
+  <header class="top-bar">
+    <select id="filtro-estado" class="vista-select">
+      <option value="nuevo" data-opcion="nuevo">Nuevos</option>
+      <option value="optimo" data-opcion="optimo">Óptimo</option>
+      <option value="en_revision" data-opcion="en_revision">A revisar</option>
+    </select>
+    <div class="agencia-pill" id="agencia-pill">
+      <button data-agencia="paraiso">Paraíso</button>
+      <button data-agencia="lomas">Lomas</button>
+    </div>
+  </header>
 
-    <section class="filters">
-      <select id="filtro-estado">
-        <option value="nuevo" data-opcion="nuevo">Nuevos</option>
-        <option value="optimo" data-opcion="optimo">Óptimo</option>
-        <option value="en_revision" data-opcion="en_revision">A revisar</option>
-      </select>
-      <button id="btn-agregar" type="button">Agregar</button>
-    </section>
+  <main class="scroll-area">
 
     <section class="tabla-wrap">
-      <div class="tabla-header">
-        <select id="page-size" class="page-size-select" title="Registros por página">
-          <option value="5">5 registros</option>
-          <option value="10" selected>10 registros</option>
-          <option value="20">20 registros</option>
+      <div class="tabla-controls">
+        <select id="page-size" class="page-size-select">
+          <option value="5">5 </option>
+          <option value="10" selected>10 </option>
+          <option value="20">20 </option>
         </select>
-        <div class="tabla-header-acciones">
+        <div class="tabla-controls-right">
           <input id="buscar-serial" type="search" placeholder="Buscar por serial" />
           <button id="btn-filtros" type="button" title="Filtros">⚙</button>
+          <button id="btn-agregar" type="button" class="btn-primary">Agregar</button>
         </div>
       </div>
       <div id="chips-filtros" class="chips-filtros" hidden></div>
@@ -74,114 +98,158 @@
       </div>
     </section>
 
-  <div class="accordion" id="acc-info">
-    <button class="accordion-header" type="button">
-      <span>Información del router</span>
-      <span class="arrow">▼</span>
-    </button>
-    <div class="accordion-panel">
-      <div id="detalle-info" class="detalle-info">
-        <div><strong>Serial:</strong> —</div>
-        <div><strong>Técnico:</strong> —</div>
-        <div><strong>Fabricante:</strong> —</div>
-        <div><strong>Cliente:</strong> —</div>
-        <div><strong>Fecha de ingreso:</strong> —</div>
-        <div><strong>Tipo:</strong> —</div>
-        <div><strong>Agregado por:</strong> —</div>
-        <div><strong>Tecnología:</strong> —</div>
-      </div>
-      <button id="btn-asignar-cliente" type="button" class="link-btn">Asignar cliente</button>
-    </div>
-  </div>
+    <section class="stock-widget">
+      <div id="stock-lista" class="stock-lista"></div>
+    </section>
 
-  <div class="accordion" id="acc-salida">
-    <button class="accordion-header" type="button">
-      <span>Registrar salida</span>
-      <span class="arrow">▼</span>
-    </button>
-    <div class="accordion-panel">
-      <div class="form-salida">
-        <div class="fila"><label>Serial</label><input id="salida-serial" type="text" readonly /></div>
-        <div class="fila"><label>Fecha</label><input id="salida-fecha" type="date" /></div>
-        <div class="fila"><label>Técnico</label><select id="salida-tecnico"></select></div>
-        <div class="fila">
-          <label>Motivo</label>
-          <select id="salida-motivo">
-            <option value="Instalación">Instalación</option>
-            <option value="Avería">Avería</option>
-            <option value="Lomas">Lomas</option>
-          </select>
+    <div class="accordion" id="acc-info">
+      <button class="accordion-header" type="button">
+        <span>Información del router</span>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="accordion-panel">
+        <div id="detalle-info" class="detalle-info">
+          <div><strong>Serial:</strong> —</div>
+          <div><strong>Técnico:</strong> —</div>
+          <div><strong>Fabricante:</strong> —</div>
+          <div><strong>Cliente:</strong> —</div>
+          <div><strong>Fecha de ingreso:</strong> —</div>
+          <div><strong>Tipo:</strong> —</div>
+          <div><strong>Ubicación:</strong> —</div>
+          <div><strong>Agencia:</strong> —</div>
+          <div><strong>Tecnología:</strong> —</div>
         </div>
-        <button id="btn-registrar-salida" type="button">Registrar</button>
+        <button id="btn-asignar-cliente" type="button" class="link-btn">Asignar cliente</button>
       </div>
     </div>
-  </div>
 
-  <div id="form-desasignar" class="form-salida" hidden>
-    <h4>Devolver a oficina</h4>
-    <p style="font-size:10px;color:#666;margin-bottom:6px;">El router está en campo con un técnico. Si no se usó, devuélvelo a oficina.</p>
-    <button id="btn-desasignar" type="button">Desasignar técnico</button>
-  </div>
-
-  <div id="detalle-revision" class="form-revision" hidden>
-    <h4>Registrar revisión</h4>
-    <div class="fila"><label>Serial</label><input id="revision-serial" type="text" readonly /></div>
-    <div class="fila"><label>Fecha</label><input id="revision-fecha" type="date" /></div>
-    <div class="fila"><label>Agregar detalle</label><textarea id="revision-detalle"></textarea></div>
-    <div class="caracteristica-perdida">
-      <span>Característica perdida:</span>
-      <label><input type="checkbox" id="perdida-cable" /> Cable</label>
-      <label><input type="checkbox" id="perdida-internet" /> Internet</label>
-    </div>
-    <div class="acciones-revision">
-      <button id="btn-registrar-revision" type="button">Registrar</button>
-      <button id="btn-registrar-merma" type="button">Merma</button>
-    </div>
-  </div>
-
-    <div id="historial-revisiones" class="historial-revisiones" hidden>
-      <div class="tabla-header">
-        <select id="hist-page-size" class="page-size-select" title="Registros por página">
-          <option value="5">5 registros</option>
-          <option value="10" selected>10 registros</option>
-          <option value="20">20 registros</option>
-        </select>
-        <div class="tabla-header-acciones">
-          <button id="btn-filtros-hist" type="button" title="Filtros">⚙</button>
+    <div class="accordion" id="acc-salida">
+      <button class="accordion-header" type="button">
+        <span>Registrar salida</span>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="accordion-panel">
+        <div class="form-salida">
+          <div class="form-grid-2">
+            <div class="field full">
+              <label>Serial</label>
+              <input id="salida-serial" type="text" readonly />
+            </div>
+            <div class="field">
+              <label>Fecha</label>
+              <input id="salida-fecha" type="date" />
+            </div>
+            <div class="field">
+              <label>Técnico</label>
+              <select id="salida-tecnico"></select>
+            </div>
+            <div class="field full">
+              <label>Motivo</label>
+              <select id="salida-motivo">
+                <option value="Instalación">Instalación</option>
+                <option value="Avería">Avería</option>
+                <option value="Cambio de plan">Cambio de plan</option>
+                <option value="Reconexión">Reconexión</option>
+                <option value="Lomas">Lomas</option>
+              </select>
+            </div>
+          </div>
+          <button id="btn-registrar-salida" type="button" class="btn-registrar-full">Registrar salida</button>
         </div>
       </div>
-      <div id="chips-filtros-hist" class="chips-filtros" hidden></div>
-      <table class="tabla">
-        <thead>
-          <tr>
-            <th>Lote</th>
-            <th>Fecha</th>
-            <th>Serial</th>
-            <th>Tipo</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody id="historial-body"></tbody>
-      </table>
-      <div class="tabla-footer">
-      <span id="hist-contador">Mostrando 0 de 0</span>
-      <div class="paginacion">
-        <button id="hist-pag-prev" type="button">◀</button>
-        <span id="hist-pag-info">1</span>
-        <button id="hist-pag-next" type="button">▶</button>
+    </div>
+
+    <div id="form-desasignar" class="form-salida" hidden>
+      <button id="btn-desasignar" type="button">Desasignar técnico</button>
+    </div>
+
+    <div id="detalle-revision" class="form-revision accordion" hidden>
+      <button class="accordion-header" type="button">
+        <span>Registrar revisión</span>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="accordion-panel">
+        <div class="form-grid-2">
+          <div class="field full">
+            <label>Serial</label>
+            <input id="revision-serial" type="text" readonly />
+          </div>
+          <div class="field full">
+            <label>Fecha</label>
+            <input id="revision-fecha" type="date" />
+          </div>
+          <div class="field full">
+            <label>Detalle</label>
+            <textarea id="revision-detalle"></textarea>
+          </div>
+        </div>
+        <div class="caracteristica-perdida">
+          <span>Característica perdida:</span>
+          <label><input type="checkbox" id="perdida-cable" /> Cable</label>
+          <label><input type="checkbox" id="perdida-internet" /> Internet</label>
+        </div>
+        <div class="acciones-revision">
+          <button id="btn-registrar-revision" type="button">Registrar</button>
+          <button id="btn-registrar-merma" type="button">Malogrado</button>
+        </div>
       </div>
     </div>
+
+    <div class="accordion" id="acc-historial" hidden>
+      <button class="accordion-header" type="button">
+        <span>Historial de revisiones</span>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="accordion-panel">
+        <div id="historial-revisiones" class="historial-revisiones">
+          <div class="tabla-controls">
+            <select id="hist-page-size" class="page-size-select">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+            </select>
+            <div class="tabla-controls-right">
+              <input id="buscar-hist-serial" type="search" placeholder="Buscar serial" />
+              <button id="btn-filtros-hist" type="button" title="Filtros">⚙</button>
+            </div>
+          </div>
+          <div id="chips-filtros-hist" class="chips-filtros" hidden></div>
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th>Fecha</th>
+                <th>Serial</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="historial-body"></tbody>
+          </table>
+          <div class="tabla-footer">
+            <span id="hist-contador">Mostrando 0 de 0</span>
+            <div class="paginacion">
+              <button id="hist-pag-prev" type="button">◀</button>
+              <span id="hist-pag-info">1</span>
+              <button id="hist-pag-next" type="button">▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="historial-detalle" class="historial-detalle" hidden></div>
 
-    <section class="stock-widget">
-      <h3>Stock por tipo</h3>
-      <div id="stock-lista" class="stock-lista"></div>
-    </section>
+  </main>
 
-    <div id="modal-root"></div>
+  <div id="modal-root"></div>
 
-    <script type="module" src="dock.ts"></script>
-  </body>
+  <footer class="bottom-bar">
+    <button id="btn-exportar" type="button">Exportar</button>
+    <button id="btn-importar" type="button">Importar</button>
+    <button id="btn-cerrar-sesion" type="button" class="btn-danger">Cerrar sesión</button>
+  </footer>
+
+  <script type="module" src="dock.ts"></script>
+</body>
 </html>

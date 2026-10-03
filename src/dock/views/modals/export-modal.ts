@@ -1,7 +1,9 @@
 import { abrirModal } from './modal-base';
 import type { Agencia } from '../../../domain/entities/router';
 
-export type ExportTipo = 'general' | 'nuevos' | 'optimos' | 'revisados' | 'retorno' | 'merma';
+export type ExportTipo =
+  | 'general' | 'nuevos' | 'optimos' | 'revisados' | 'retorno' | 'merma'
+  | 'cierre_mes';
 
 export function abrirExportModal(
   agencia: Agencia,
@@ -9,19 +11,21 @@ export function abrirExportModal(
 ): void {
   const form = document.createElement('div');
 
-  const opcionesParaiso: { id: ExportTipo; label: string }[] = [
-    { id: 'general', label: 'General (todas las categorías)' },
-    { id: 'nuevos', label: 'Nuevos' },
-    { id: 'optimos', label: 'Óptimos' },
-    { id: 'revisados', label: 'Revisados' },
-    { id: 'retorno', label: 'Retorno' },
-    { id: 'merma', label: 'Merma' },
+  const opcionesParaiso: { id: ExportTipo; label: string; rol: 'general' | 'especifico' | 'cierre' }[] = [
+    { id: 'cierre_mes', label: 'Cierre del mes (solo oficina)', rol: 'cierre' },
+    { id: 'general', label: 'General (todas las categorías)', rol: 'general' },
+    { id: 'nuevos', label: 'Nuevos', rol: 'especifico' },
+    { id: 'optimos', label: 'Óptimos', rol: 'especifico' },
+    { id: 'revisados', label: 'Revisados', rol: 'especifico' },
+    { id: 'retorno', label: 'Retorno', rol: 'especifico' },
+    { id: 'merma', label: 'Merma', rol: 'especifico' },
   ];
 
-  const opcionesLomas: { id: ExportTipo; label: string }[] = [
-    { id: 'general', label: 'General' },
-    { id: 'nuevos', label: 'Nuevos' },
-    { id: 'optimos', label: 'Óptimos' },
+  const opcionesLomas: { id: ExportTipo; label: string; rol: 'general' | 'especifico' | 'cierre' }[] = [
+    { id: 'cierre_mes', label: 'Cierre del mes (solo oficina)', rol: 'cierre' },
+    { id: 'general', label: 'General', rol: 'general' },
+    { id: 'nuevos', label: 'Nuevos', rol: 'especifico' },
+    { id: 'optimos', label: 'Óptimos', rol: 'especifico' },
   ];
 
   const opciones = agencia === 'lomas' ? opcionesLomas : opcionesParaiso;
@@ -33,26 +37,40 @@ export function abrirExportModal(
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.value = op.id;
-    cb.dataset.rol = op.id === 'general' ? 'general' : 'especifico';
+    cb.dataset.rol = op.rol;
     checkboxes.push(cb);
     label.append(cb, document.createTextNode(op.label));
     form.append(label);
   });
 
-  // General desactiva los específicos
   const generalCb = checkboxes.find(c => c.dataset.rol === 'general')!;
+  const cierreCb = checkboxes.find(c => c.dataset.rol === 'cierre')!;
   const especificos = checkboxes.filter(c => c.dataset.rol === 'especifico');
 
   generalCb.addEventListener('change', () => {
-    especificos.forEach(c => {
-      c.disabled = generalCb.checked;
-      if (generalCb.checked) c.checked = false;
-    });
+    if (generalCb.checked) {
+      cierreCb.checked = false;
+      especificos.forEach(c => { c.disabled = true; c.checked = false; });
+    } else {
+      especificos.forEach(c => { c.disabled = false; });
+    }
+  });
+
+  cierreCb.addEventListener('change', () => {
+    if (cierreCb.checked) {
+      generalCb.checked = false;
+      especificos.forEach(c => { c.disabled = true; c.checked = false; });
+    } else {
+      especificos.forEach(c => { c.disabled = false; });
+    }
   });
 
   especificos.forEach(c => {
     c.addEventListener('change', () => {
-      if (c.checked) generalCb.checked = false;
+      if (c.checked) {
+        generalCb.checked = false;
+        cierreCb.checked = false;
+      }
     });
   });
 
@@ -62,7 +80,9 @@ export function abrirExportModal(
     textoAceptar: 'Descargar',
     onAceptar: async () => {
       const seleccionados: ExportTipo[] = [];
-      if (generalCb.checked) {
+      if (cierreCb.checked) {
+        seleccionados.push('cierre_mes');
+      } else if (generalCb.checked) {
         seleccionados.push('general');
       } else {
         checkboxes.forEach(c => {

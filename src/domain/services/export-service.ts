@@ -162,12 +162,48 @@ export function generarExcel(
     revisados: () => ({ nombre: 'Revisados', data: hojaRevisados(routers, movs) }),
     retorno: () => ({ nombre: 'Retorno', data: hojaRetorno(movs) }),
     merma: () => ({ nombre: 'Merma', data: hojaMerma(routers, movs) }),
+    cierre_mes: () => ({ nombre: 'Cierre del mes', data: [] }),
   };
 
   tipos.forEach(t => {
+    if (t === 'cierre_mes') {
+      // Hoja 1: Nuevos en oficina
+      const nuevos = routers.filter(r =>
+        r.estado === 'nuevo' && r.ubicacion === 'oficina' && r.agencia === agencia
+      );
+      const wsNuevos = XLSX.utils.json_to_sheet(nuevos.map(r => ({
+        SERIAL: r.serial,
+        LOTE: r.lote ?? '',
+        TIPO: TIPO_LABEL[r.tipo],
+        FABRICANTE: r.fabricante ?? '',
+        TECNOLOGIA: r.tecnologia ?? '',
+        FECHA_INGRESO: fmt(r.fechaIngreso),
+        AGENCIA: AGENCIA_LABEL[r.agencia],
+      })));
+      const rangoN = XLSX.utils.decode_range(wsNuevos['!ref'] ?? 'A1');
+      wsNuevos['!autofilter'] = { ref: XLSX.utils.encode_range(rangoN) };
+      XLSX.utils.book_append_sheet(wb, wsNuevos, 'Nuevos en oficina');
+
+      // Hoja 2: Óptimos en oficina
+      const optimos = routers.filter(r =>
+        r.estado === 'optimo' && r.ubicacion === 'oficina' && r.agencia === agencia
+      );
+      const wsOptimos = XLSX.utils.json_to_sheet(optimos.map(r => ({
+        SERIAL: r.serial,
+        TIPO: TIPO_LABEL[r.tipo],
+        FABRICANTE: r.fabricante ?? '',
+        TECNOLOGIA: r.tecnologia ?? '',
+        FECHA_REGISTRO: fmt(r.actualizadoEn),
+        AGENCIA: AGENCIA_LABEL[r.agencia],
+      })));
+      const rangoO = XLSX.utils.decode_range(wsOptimos['!ref'] ?? 'A1');
+      wsOptimos['!autofilter'] = { ref: XLSX.utils.encode_range(rangoO) };
+      XLSX.utils.book_append_sheet(wb, wsOptimos, 'Óptimos en oficina');
+      return;
+    }
+
     const { nombre, data } = construcciones[t]();
     const ws = XLSX.utils.json_to_sheet(data);
-    // Autofiltro en el rango de datos (incluye cabecera)
     const rango = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
     ws['!autofilter'] = { ref: XLSX.utils.encode_range(rango) };
     XLSX.utils.book_append_sheet(wb, ws, nombre);

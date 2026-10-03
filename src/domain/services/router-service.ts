@@ -187,6 +187,7 @@ export class RouterService {
     await this.routers.save(router);
     await this.registrar('asignacion_cliente', router, params.usuario, {
       cliente: params.cliente,
+      tecnico: router.tecnicoActual,
       motivo: params.motivo,
     });
     return router;

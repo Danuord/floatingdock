@@ -13,9 +13,13 @@ import type { Agencia } from '../domain/entities/router';
 import { abrirExportModal } from './views/modals/export-modal';
 import { generarExcel } from '../domain/services/export-service';
 import { abrirFiltrosModal, type FiltrosAplicados, type OpcionFiltro } from './views/modals/filter-modal';
+import { abrirImportModal } from './views/modals/import-modal';
+
 
 // ── Instancias ─────────────────────────────────────────
 const elAccInfo = document.querySelector<HTMLDivElement>('#acc-info')!;
+const elBuscarHist = document.querySelector<HTMLInputElement>('#buscar-hist-serial')!;
+let histSearch = '';
 const elAccSalida = document.querySelector<HTMLDivElement>('#acc-salida')!;
 let lastSelectedSerial: string | null = null;
 let filtrosActivos: FiltrosAplicados = {};
@@ -37,11 +41,50 @@ const elPerdidaInternet = document.querySelector<HTMLInputElement>('#perdida-int
 const elSalidaMotivo = document.querySelector<HTMLSelectElement>('#salida-motivo')!;
 const elFormDesasignar = document.querySelector<HTMLDivElement>('#form-desasignar')!;
 const elBtnDesasignar = document.querySelector<HTMLButtonElement>('#btn-desasignar')!;
-const elAgencia = document.querySelector<HTMLSelectElement>('#agencia-actual')!;
+const elAgenciaPill = document.querySelector<HTMLDivElement>('#agencia-pill')!;
+const elAgenciaBtns = elAgenciaPill.querySelectorAll<HTMLButtonElement>('button[data-agencia]');
 const elBtnFiltros = document.querySelector<HTMLButtonElement>('#btn-filtros')!;
 const elBtnFiltrosHist = document.querySelector<HTMLButtonElement>('#btn-filtros-hist')!;
 const elChipsFiltrosHist = document.querySelector<HTMLDivElement>('#chips-filtros-hist')!;
 const elChipsFiltros = document.querySelector<HTMLDivElement>('#chips-filtros')!;
+const elLoginOverlay = document.querySelector<HTMLDivElement>('#login-overlay')!;
+const elLoginUsuario = document.querySelector<HTMLSelectElement>('#login-usuario')!;
+const elLoginPin = document.querySelector<HTMLInputElement>('#login-pin')!;
+const elLoginError = document.querySelector<HTMLParagraphElement>('#login-error')!;
+const elLoginBtn = document.querySelector<HTMLButtonElement>('#login-btn')!;
+
+const SESSION_KEY = 'sesion-actual';
+const elUsuarioLabel = document.querySelector<HTMLSpanElement>('#usuario-label')!;
+const elBtnCerrarSesion = document.querySelector<HTMLButtonElement>('#btn-cerrar-sesion')!;
+
+interface Sesion {
+  usuario: string;
+  expira: number;
+}
+
+async function getSesionValida(): Promise<Sesion | null> {
+  const data = await chrome.storage.local.get(SESSION_KEY);
+  const s = data[SESSION_KEY] as Sesion | undefined;
+  if (!s) return null;
+  if (Date.now() > s.expira) return null;
+  return s;
+}
+
+function proximaMedianoche(): number {
+  const d = new Date();
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+}
+
+async function guardarSesion(usuario: string): Promise<void> {
+  const s: Sesion = { usuario, expira: proximaMedianoche() };
+  await chrome.storage.local.set({ [SESSION_KEY]: s });
+}
+
+async function cerrarSesion(): Promise<void> {
+  await chrome.storage.local.remove(SESSION_KEY);
+  location.reload();
+}
 
 // ── Estado ─────────────────────────────────────────────
 let routers: Router[] = [];
@@ -86,7 +129,6 @@ function setToday(input: HTMLInputElement) {
 // ── Elementos ──────────────────────────────────────────
 const elPageSize = document.querySelector<HTMLSelectElement>('#page-size')!;
 const elHistPageSize = document.querySelector<HTMLSelectElement>('#hist-page-size')!;
-const elUsuario = document.querySelector<HTMLSelectElement>('#usuario-actual')!;
 const elFiltro = document.querySelector<HTMLSelectElement>('#filtro-estado')!;
 const elBtnAgregar = document.querySelector<HTMLButtonElement>('#btn-agregar')!;
 const elBuscar = document.querySelector<HTMLInputElement>('#buscar-serial')!;
@@ -97,7 +139,7 @@ const elPagPrev = document.querySelector<HTMLButtonElement>('#pag-prev')!;
 const elPagNext = document.querySelector<HTMLButtonElement>('#pag-next')!;
 const elDetalleInfo = document.querySelector<HTMLDivElement>('#detalle-info')!;
 const elBtnAsignarCliente = document.querySelector<HTMLButtonElement>('#btn-asignar-cliente')!;
-const elFormSalida = document.querySelector<HTMLDivElement>('.form-salida')!;
+const elFormSalida = document.querySelector<HTMLDivElement>('#acc-salida .form-salida')!;
 const elSalidaSerial = document.querySelector<HTMLInputElement>('#salida-serial')!;
 const elSalidaFecha = document.querySelector<HTMLInputElement>('#salida-fecha')!;
 const elSalidaTecnico = document.querySelector<HTMLSelectElement>('#salida-tecnico')!;
@@ -110,13 +152,16 @@ const elBtnRegistrarRevision = document.querySelector<HTMLButtonElement>('#btn-r
 const elBtnRegistrarMerma = document.querySelector<HTMLButtonElement>('#btn-registrar-merma')!;
 const elStockLista = document.querySelector<HTMLDivElement>('#stock-lista')!;
 const elBtnExportar = document.querySelector<HTMLButtonElement>('#btn-exportar')!;
+const elBtnImportar = document.querySelector<HTMLButtonElement>('#btn-importar')!;
 const elHistContador = document.querySelector<HTMLSpanElement>('#hist-contador')!;
 const elHistPagInfo = document.querySelector<HTMLSpanElement>('#hist-pag-info')!;
+let syncActivo = true;
 const elHistPagPrev = document.querySelector<HTMLButtonElement>('#hist-pag-prev')!;
 const elHistPagNext = document.querySelector<HTMLButtonElement>('#hist-pag-next')!;
 let histPage = 1;
 let histTotal = 0;
 let histPageSize = 10;
+let motivosRetorno = new Map<string, string>();
 const elBarraMultiple = document.querySelector<HTMLDivElement>('#barra-multiple')!;
 const elMultiContador = document.querySelector<HTMLSpanElement>('#multi-contador')!;
 const elBtnEnviarLomasMulti = document.querySelector<HTMLButtonElement>('#btn-enviar-lomas-multi')!;
@@ -124,26 +169,66 @@ const elBtnLimpiarMulti = document.querySelector<HTMLButtonElement>('#btn-limpia
 const elCheckAll = document.querySelector<HTMLInputElement>('#check-all')!;
 let seleccionMultiple = new Set<string>();
 let filtrosHist: FiltrosAplicados = {};
+const elBtnIrCambiarPin = document.querySelector<HTMLButtonElement>('#btn-ir-cambiar-pin')!;
+const elCambiarPinBox = document.querySelector<HTMLDivElement>('#cambiar-pin-box')!;
+const elLoginBox = document.querySelector<HTMLDivElement>('.login-box')!;
+const elCpUsuario = document.querySelector<HTMLSelectElement>('#cp-usuario')!;
+const elCpPinViejo = document.querySelector<HTMLInputElement>('#cp-pin-viejo')!;
+const elCpPinNuevo = document.querySelector<HTMLInputElement>('#cp-pin-nuevo')!;
+const elCpPinConfirmar = document.querySelector<HTMLInputElement>('#cp-pin-confirmar')!;
+const elCpError = document.querySelector<HTMLParagraphElement>('#cp-error')!;
+const elCpGuardar = document.querySelector<HTMLButtonElement>('#cp-guardar')!;
+const elCpVolver = document.querySelector<HTMLButtonElement>('#cp-volver')!;
+const elAccHistorial = document.querySelector<HTMLDivElement>('#acc-historial')!;
 
 // ── Inicialización ─────────────────────────────────────
 async function init() {
-  // 1. Configurar UI (dropdowns, listeners) sin esperar red
-  elUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
-  elUsuario.value = usuarioActual;
-  elUsuario.addEventListener('change', () => { usuarioActual = elUsuario.value; });
+  // 1. Verificar sesión
+  const sesion = await getSesionValida();
+  if (!sesion) {
+    mostrarLogin();
+    return;
+  }
+  usuarioActual = sesion.usuario;
+  elUsuarioLabel.textContent = usuarioActual;
+  elBtnCerrarSesion.addEventListener('click', () => {
+    if (confirm('¿Cerrar sesión?')) void cerrarSesion();
+  });
+  elLoginOverlay.hidden = true;
 
-  elAgencia.value = agenciaActual;
-  elAgencia.addEventListener('change', async () => {
-    agenciaActual = elAgencia.value as Agencia;
-    routerRepo = new ChromeRouterRepository(agenciaActual);
-    movRepo = new ChromeMovimientoRepository(agenciaActual);
-    selectedSerial = null;
-    selectedMovId = null;
-    seleccionMultiple.clear();
-    actualizarOpcionesFiltro();   // ← nueva
-    actualizarBotonAgregar();      // ← por si acaso
-    await refresh();
-    void sincronizarConSheets();
+  function setAgenciaUI() {
+    elAgenciaBtns.forEach(b => {
+      b.classList.toggle('active', b.dataset.agencia === agenciaActual);
+    });
+  }
+  setAgenciaUI();
+
+  elAgenciaBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const nueva = btn.dataset.agencia as Agencia;
+      if (nueva === agenciaActual) return;
+      agenciaActual = nueva;
+      setAgenciaUI();
+      routerRepo = new ChromeRouterRepository(agenciaActual);
+      movRepo = new ChromeMovimientoRepository(agenciaActual);
+      selectedSerial = null;
+      selectedMovId = null;
+      seleccionMultiple.clear();
+      actualizarOpcionesFiltro();
+      actualizarBotonAgregar();
+      await refresh();
+      void sincronizarConSheets();
+    });
+  });
+
+  // Cargar preferencia
+  const syncPref = await chrome.storage.local.get('syncActivo');
+  syncActivo = syncPref.syncActivo !== false;
+  
+  elBuscarHist.addEventListener('input', () => {
+    histSearch = elBuscarHist.value.trim().toLowerCase();
+    histPage = 1;
+    void renderHistorialRevisiones();
   });
 
   document.querySelectorAll<HTMLButtonElement>('.accordion-header').forEach(btn => {
@@ -166,6 +251,8 @@ async function init() {
     actualizarBotonAgregar();
     refresh();
     seleccionMultiple.clear();
+    histSearch = '';
+    elBuscarHist.value = '';
   });
 
   elBuscar.addEventListener('input', () => {
@@ -210,6 +297,8 @@ async function init() {
     renderTabla();
   });
 
+  elBtnImportar.addEventListener('click', importarExcel);
+
   elBtnEnviarLomasMulti.addEventListener('click', enviarLomasMasivo);
 
   elBtnFiltros.addEventListener('click', () => {
@@ -218,6 +307,7 @@ async function init() {
       { campo: 'tecnico', label: 'Técnico', tipo: 'select', opciones: TECNICOS },
       { campo: 'tecnologia', label: 'Tecnología', tipo: 'select', opciones: ['WiFi 5', 'WiFi 6'] },
       { campo: 'fechaIngreso', label: 'Fecha ingreso', tipo: 'fecha' },
+      { campo: 'soloOficina', label: 'Solo en oficina', tipo: 'checkbox' },
     ];
 
     abrirFiltrosModal(campos, filtrosActivos, (nuevos) => {
@@ -249,6 +339,7 @@ async function init() {
     tecnologia: 'Tecnología',
     fechaIngreso: 'Ingreso',
     fechaSalida: 'Salida',
+    soloOficina: 'Solo en oficina',
   };
 
   function actualizarChips() {
@@ -380,6 +471,120 @@ async function init() {
   setInterval(() => { void sincronizarConSheets(); }, 60_000);
 }
 
+
+
+function mostrarLogin() {
+  elLoginOverlay.hidden = false;
+  elLoginUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
+
+  const intentar = async () => {
+    const nombre = elLoginUsuario.value;
+    const pin = elLoginPin.value.trim();
+    elLoginError.textContent = '';
+
+    if (!nombre || !pin) {
+      elLoginError.textContent = 'Completa todos los campos';
+      return;
+    }
+
+    elLoginBtn.disabled = true;
+    elLoginBtn.textContent = 'Verificando...';
+
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'SHEETS',
+        accion: 'login',
+        payload: { nombre, pin },
+      });
+
+      if (!res.ok || !res.data?.ok) {
+        elLoginError.textContent = res.data?.error ?? 'Error de conexión';
+        elLoginBtn.disabled = false;
+        elLoginBtn.textContent = 'Entrar';
+        return;
+      }
+
+      await guardarSesion(nombre);
+      location.reload();
+    } catch (e) {
+      elLoginError.textContent = 'Error de conexión';
+      elLoginBtn.disabled = false;
+      elLoginBtn.textContent = 'Entrar';
+    }
+  };
+
+  elLoginBtn.addEventListener('click', intentar);
+  elLoginPin.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') void intentar();
+  });
+  elLoginPin.focus();
+
+  elBtnIrCambiarPin.addEventListener('click', () => {
+  elLoginBox.hidden = true;
+  elCambiarPinBox.hidden = false;
+  elCpUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
+  elCpPinViejo.value = '';
+  elCpPinNuevo.value = '';
+  elCpPinConfirmar.value = '';
+  elCpError.textContent = '';
+  elCpPinViejo.focus();
+  });
+
+  elCpVolver.addEventListener('click', () => {
+    elCambiarPinBox.hidden = true;
+    elLoginBox.hidden = false;
+  });
+
+  elCpGuardar.addEventListener('click', async () => {
+    const nombre = elCpUsuario.value;
+    const pinViejo = elCpPinViejo.value.trim();
+    const pinNuevo = elCpPinNuevo.value.trim();
+    const pinConfirmar = elCpPinConfirmar.value.trim();
+
+    elCpError.textContent = '';
+
+    if (!pinViejo || !pinNuevo || !pinConfirmar) {
+      elCpError.textContent = 'Completa todos los campos';
+      return;
+    }
+    if (pinNuevo !== pinConfirmar) {
+      elCpError.textContent = 'Los PIN nuevos no coinciden';
+      return;
+    }
+    if (pinNuevo.length < 4) {
+      elCpError.textContent = 'El PIN debe tener al menos 4 dígitos';
+      return;
+    }
+
+    elCpGuardar.disabled = true;
+    elCpGuardar.textContent = 'Guardando...';
+
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'SHEETS',
+        accion: 'cambiarPin',
+        payload: { nombre, pinViejo, pinNuevo },
+      });
+
+      if (!res.ok || !res.data?.ok) {
+        elCpError.textContent = res.data?.error ?? 'Error de conexión';
+        elCpGuardar.disabled = false;
+        elCpGuardar.textContent = 'Guardar';
+        return;
+      }
+
+      elCpError.textContent = '';
+      alert('PIN actualizado correctamente');
+      elCambiarPinBox.hidden = true;
+      elLoginBox.hidden = false;
+    } catch (e) {
+      elCpError.textContent = 'Error de conexión';
+      elCpGuardar.disabled = false;
+      elCpGuardar.textContent = 'Guardar';
+    }
+  });
+}
+
 async function enviarLomasMasivo() {
   if (seleccionMultiple.size === 0) return;
   const seriales = Array.from(seleccionMultiple);
@@ -394,15 +599,93 @@ async function enviarLomasMasivo() {
   }
 }
 
-async function sincronizarConSheets() {
+async function importarExcel() {
+  abrirImportModal(async (file) => {
     try {
+      const { parseExcel } = await import('../domain/services/import-service');
+      const { pushBatch } = await import('../infrastructure/storage/sheets-sync');
+
+      const payload = await parseExcel(file, agenciaActual);
+
+      // Filtrar seriales que ya existen
+      const actuales = await routerRepo.getAll();
+      const mapaActual = new Map(actuales.map(r => [r.serial, r]));
+
+      const routersNuevos: Router[] = [];
+      const routersActualizados: Router[] = [];
+
+      payload.routers.forEach(r => {
+        const ex = mapaActual.get(r.serial);
+        if (ex) {
+          // Actualizar estado si el import trae info más nueva
+          // (solo cuando viene de REVISADOS o cambia el estado)
+          ex.estado = r.estado;
+          ex.ubicacion = r.ubicacion;
+          ex.tecnicoActual = r.tecnicoActual;
+          ex.clienteActual = r.clienteActual;
+          ex.actualizadoEn = Date.now();
+          routersActualizados.push(ex);
+        } else {
+          routersNuevos.push(r);
+        }
+      });
+
+      // Movimientos: solo los relevantes para routers que YA existen
+      const tiposRelevantes = new Set(['retorno', 'revision', 'merma']);
+      const movsNuevos = payload.movimientos.filter(m => {
+        if (mapaActual.has(m.routerSerial)) {
+          return tiposRelevantes.has(m.tipo);
+        }
+        return true; // router nuevo → todos sus movimientos
+      });
+
+      const saltados = routersActualizados.length;
+
+      if (routersNuevos.length === 0) {
+        console.log('Errores:', payload.errores);
+        alert(
+          `Importación completa.\n` +
+          `Routers creados: ${routersNuevos.length}\n` +
+          `Routers actualizados: ${routersActualizados.length}\n` +
+          `Movimientos: ${movsNuevos.length}\n` +
+          `Duplicados en Excel: ${payload.duplicados.length}\n` +
+          `Errores: ${payload.errores.length}`
+        );
+        return;
+      }
+
+      // Guardar local
+      const key = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
+      const todosRouters = [...actuales.filter(r => !routersActualizados.some(a => a.id === r.id)), ...routersActualizados, ...routersNuevos];
+      await chrome.storage.local.set({ [key]: todosRouters });
+
+      const items: any[] = [];
+      routersNuevos.forEach(r => items.push({ router: r, agencia: agenciaActual }));
+      routersActualizados.forEach(r => items.push({ router: r, agencia: agenciaActual }));
+      movsNuevos.forEach(m => items.push({ movimiento: m, agencia: agenciaActual }));
+
+      const CHUNK = 40;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        await pushBatch(items.slice(i, i + CHUNK));
+      }
+
+      alert(`Importación completa.\nCreados: ${routersNuevos.length}\nSaltados: ${saltados}\nErrores: ${payload.errores.length}\n\nPrimeros 5:\n${payload.errores.slice(0, 5).join('\n')}`);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al importar');
+    }
+  });
+}
+
+async function sincronizarConSheets() {
+  if (!syncActivo) return;
+  try {
     const { pullTodo, hayPendientes } = await import('../infrastructure/storage/sheets-sync');
-    if (hayPendientes()) return;   // ← no pisar mientras haya push en curso
+    if (hayPendientes()) return;
     const { routers: r, movimientos: m } = await pullTodo(agenciaActual);
     const keyRouters = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
     const keyMovs = agenciaActual === 'lomas' ? 'movimientosLomas' : 'movimientos';
     await chrome.storage.local.set({ [keyRouters]: r, [keyMovs]: m });
-    // El storage.onChanged ya dispara refresh()
   } catch (e) {
     console.debug('Sin conexión a Sheets', e);
   }
@@ -481,6 +764,7 @@ function filteredRouters(): Router[] {
         const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         if (iso !== f.fechaIngreso) return false;
       }
+      if (f.soloOficina && r.ubicacion !== 'oficina') return false;
       return true;
     })
     .sort((a, b) => b.fechaIngreso - a.fechaIngreso);
@@ -507,6 +791,9 @@ function renderTabla() {
 
   const puedeSeleccionarMultiple = currentFilter === 'nuevo' && agenciaActual === 'paraiso';
 
+  const thLote = document.querySelector<HTMLTableCellElement>('.tabla-wrap .tabla thead th:nth-child(2)');
+    if (thLote) thLote.textContent = currentFilter === 'en_revision' ? 'Motivo' : 'Lote';
+
   elTablaBody.replaceChildren(
     ...page.map(r => {
       const tr = document.createElement('tr');
@@ -529,7 +816,11 @@ function renderTabla() {
       tr.append(tdCheck);
 
       const tdLote = document.createElement('td');
-      tdLote.textContent = r.lote ?? '—';
+        if (currentFilter === 'en_revision') {
+          tdLote.textContent = motivosRetorno.get(r.serial) ?? '—';
+        } else {
+          tdLote.textContent = r.lote ?? '—';
+        }
       const tdFecha = document.createElement('td');
       tdFecha.textContent = formatDate(r.fechaIngreso);
       const tdSerial = document.createElement('td');
@@ -542,7 +833,7 @@ function renderTabla() {
       tr.append(tdLote, tdFecha, tdSerial, tdTipo, tdEstado);
 
       tr.addEventListener('click', () => {
-        selectedSerial = r.serial;
+        selectedSerial = (selectedSerial === r.serial) ? null : r.serial;
         renderTabla();
         renderDetalle();
       });
@@ -624,6 +915,7 @@ async function renderDetalle() {
     <div><strong>Ubicación:</strong> ${getUbicacionLabel(router.ubicacion)}</div>
     <div><strong>Agencia:</strong> ${router.agencia === 'paraiso' ? 'Paraíso' : 'Lomas'}</div>
     <div><strong>Tecnología:</strong> ${router.tecnologia ?? '—'}</div>
+    ${currentFilter === 'en_revision' ? `<div style="grid-column: 1 / -1;"><strong>Motivo:</strong> ${motivosRetorno.get(router.serial) ?? '—'}</div>` : ''}
   `;
 
   elBtnAsignarCliente.hidden = router.estado === 'en_revision';
@@ -640,13 +932,14 @@ async function renderDetalle() {
   });
 
   if (router.estado === 'en_revision') {
-    elFormSalida.hidden = true;
+    elAccSalida.hidden = true;
     elFormRevision.hidden = false;
     elRevisionSerial.value = router.serial;
     elRevisionDetalle.value = '';
     setToday(elRevisionFecha);
   } else {
-    elFormSalida.hidden = false;
+    elAccSalida.hidden = false;
+    elFormSalida.hidden = false;   // ← importante, quitar el hidden
     elFormRevision.hidden = true;
     elSalidaSerial.value = router.serial;
     setToday(elSalidaFecha);
@@ -680,8 +973,18 @@ function renderStock() {
 
 async function renderHistorialRevisiones() {
   const movs = await movRepo.getAll();
+  motivosRetorno.clear();
+  movs
+    .filter(m => m.tipo === 'retorno' && m.motivo)
+    .sort((a, b) => b.fecha - a.fecha)
+    .forEach(m => {
+      if (!motivosRetorno.has(m.routerSerial)) {
+        motivosRetorno.set(m.routerSerial, m.motivo!);
+      }
+    });
   const revisiones = movs
     .filter(m => m.tipo === 'revision' || m.tipo === 'merma')
+    .filter(m => histSearch === '' || m.routerSerial.toLowerCase().includes(histSearch))
     .filter(m => {
       const f = filtrosHist;
       if (f.tipo && m.routerTipo && getTipoLabel(m.routerTipo) !== f.tipo) return false;
@@ -699,12 +1002,13 @@ async function renderHistorialRevisiones() {
     .sort((a, b) => b.fecha - a.fecha);
 
   if (currentFilter !== 'en_revision' || revisiones.length === 0) {
-    elHistorialRevisiones.hidden = true;
+    elAccHistorial.hidden = true;
     elHistorialDetalle.hidden = true;
     return;
   }
 
-  elHistorialRevisiones.hidden = false;
+  elAccHistorial.hidden = false;
+
   histTotal = revisiones.length;
   const totalPages = Math.max(1, Math.ceil(histTotal / histPageSize));
   if (histPage > totalPages) histPage = totalPages;

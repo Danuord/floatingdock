@@ -10,6 +10,7 @@
   "devDependencies": {
     "@types/chrome": "^0.0.323",
     "@types/node": "^22.15.30",
+    "hot-reload-extension-vite": "^1.1.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   },

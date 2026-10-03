@@ -21,6 +21,8 @@ export function abrirClienteModal(
   selectMotivo.append(
     new Option('Instalación', 'Instalación'),
     new Option('Avería', 'Avería'),
+    new Option('Cambio de plan', 'Cambio de plan'),
+    new Option('Reconexión', 'Reconexión'),
   );
 
   form.append(

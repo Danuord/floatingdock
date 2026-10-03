@@ -11,16 +11,18 @@ export interface FiltrosAplicados {
   fechaSalida?: string;
   fechaRevision?: string;
   resultado?: string;
+  soloOficina?: boolean;
 }
 
 export type CampoFiltro =
   | 'lote' | 'tipo' | 'tecnico' | 'agencia' | 'tecnologia'
-  | 'fechaIngreso' | 'fechaSalida' | 'fechaRevision' | 'resultado';
+  | 'fechaIngreso' | 'fechaSalida' | 'fechaRevision' | 'resultado'
+  | 'soloOficina';
 
 export interface OpcionFiltro {
   campo: CampoFiltro;
   label: string;
-  tipo: 'texto' | 'select' | 'fecha';
+  tipo: 'texto' | 'select' | 'fecha' | 'checkbox';
   opciones?: string[];
 }
 
@@ -33,6 +35,19 @@ export function abrirFiltrosModal(
   const inputs: Partial<Record<CampoFiltro, HTMLInputElement | HTMLSelectElement>> = {};
 
   campos.forEach(c => {
+    // Caso especial: checkbox
+    if (c.tipo === 'checkbox') {
+      const wrapper = document.createElement('label');
+      wrapper.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!actuales[c.campo];
+      wrapper.append(cb, document.createTextNode(c.label));
+      inputs[c.campo] = cb;
+      form.append(wrapper);
+      return;
+    }
+
     let input: HTMLInputElement | HTMLSelectElement;
 
     if (c.tipo === 'select') {
@@ -64,8 +79,12 @@ export function abrirFiltrosModal(
     onAceptar: () => {
       const nuevos: FiltrosAplicados = {};
       Object.entries(inputs).forEach(([k, el]) => {
-        const v = (el as HTMLInputElement).value.trim();
-        if (v) (nuevos as any)[k] = v;
+        if ((el as HTMLInputElement).type === 'checkbox') {
+          if ((el as HTMLInputElement).checked) (nuevos as any)[k] = true;
+        } else {
+          const v = (el as HTMLInputElement).value.trim();
+          if (v) (nuevos as any)[k] = v;
+        }
       });
       onAplicar(nuevos);
       cerrar();

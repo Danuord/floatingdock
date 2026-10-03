@@ -49,14 +49,20 @@ async function intentarConRetry(req: SheetsRequest, intentos = 3): Promise<Sheet
   return { ok: false, error: 'Reintentos agotados' };
 }
 
-export function pushRouter(router: Router, agencia: Agencia): Promise<void> {
+export async function pushRouter(router: Router, agencia: Agencia): Promise<void> {
+  const pref = await chrome.storage.local.get('syncActivo');
+  if (pref.syncActivo === false) return;
+
   return encolar(async () => {
     const res = await intentarConRetry({ type: 'SHEETS', accion: 'upsertRouter', payload: { router, agencia } });
     if (!res.ok) console.error('pushRouter falló:', res.error);
   });
 }
 
-export function pushMovimiento(mov: Movimiento, agencia: Agencia): Promise<void> {
+export async function pushMovimiento(mov: Movimiento, agencia: Agencia): Promise<void> {
+  const pref = await chrome.storage.local.get('syncActivo');
+  if (pref.syncActivo === false) return;
+
   return encolar(async () => {
     const res = await intentarConRetry({ type: 'SHEETS', accion: 'insertMovimiento', payload: { movimiento: mov, agencia } });
     if (!res.ok) console.error('pushMovimiento falló:', res.error);
@@ -158,15 +164,20 @@ export interface BatchItem {
 }
 
 export async function pushBatch(items: BatchItem[]): Promise<void> {
+  const pref = await chrome.storage.local.get('syncActivo');
+  if (pref.syncActivo === false) return;
+
   const upserts = items.filter(i => i.router).map(i => ({ router: i.router, agencia: i.agencia }));
   const movimientos = items.filter(i => i.movimiento).map(i => ({ movimiento: i.movimiento, agencia: i.agencia }));
 
-  const res = await intentarConRetry({
-    type: 'SHEETS',
-    accion: 'batch' as any,
-    payload: { upserts, movimientos },
+  return encolar(async () => {
+    const res = await intentarConRetry({
+      type: 'SHEETS',
+      accion: 'batch' as any,
+      payload: { upserts, movimientos },
+    });
+    if (!res.ok) console.error('pushBatch falló:', res.error);
   });
-  if (!res.ok) console.error('pushBatch falló:', res.error);
 }
 
 export function deleteRouterRemoto(id: string, agencia: Agencia): Promise<void> {
