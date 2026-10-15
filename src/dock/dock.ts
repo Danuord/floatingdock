@@ -1,8 +1,8 @@
 // src/dock/dock.ts
 import type { Router, TipoRouter, EstadoRouter } from '../domain/entities/router';
 import { TECNICOS, USUARIOS } from '../domain/entities/tecnicos';
-import { ChromeRouterRepository } from '../infrastructure/storage/chrome-router-repository';
-import { ChromeMovimientoRepository } from '../infrastructure/storage/chrome-movimiento-repository';
+import { SupabaseRouterRepository } from '../infrastructure/storage/supabase-router-repository';
+import { SupabaseMovimientoRepository } from '../infrastructure/storage/supabase-movimiento-repository';
 import { RouterService } from '../domain/services/router-service';
 import { calcularStockPorTipo, calcularEnRevision, type StockPorTipo } from '../domain/services/stock-calculator';
 import { abrirNuevoModal } from './views/modals/nuevo-modal';
@@ -14,23 +14,29 @@ import { abrirExportModal } from './views/modals/export-modal';
 import { generarExcel } from '../domain/services/export-service';
 import { abrirFiltrosModal, type FiltrosAplicados, type OpcionFiltro } from './views/modals/filter-modal';
 import { abrirImportModal } from './views/modals/import-modal';
-
+import { loginSupabase, cambiarPinSupabase, getUsuariosActivos } from '../infrastructure/storage/supabase-usuario-repository';
+import { supabase } from '../infrastructure/storage/supabase-client';
+(window as any).supabase = supabase;
+import { suscribirCambios } from '../infrastructure/storage/supabase-realtime';
 
 // ── Instancias ─────────────────────────────────────────
+const elBtnDevolverParaiso = document.querySelector<HTMLButtonElement>('#btn-devolver-paraiso')!;
+let modoDevolucion = false;
 const elAccInfo = document.querySelector<HTMLDivElement>('#acc-info')!;
 const elBuscarHist = document.querySelector<HTMLInputElement>('#buscar-hist-serial')!;
 let histSearch = '';
 const elAccSalida = document.querySelector<HTMLDivElement>('#acc-salida')!;
 let lastSelectedSerial: string | null = null;
 let filtrosActivos: FiltrosAplicados = {};
+let desuscribir: (() => void) | null = null;
 let agenciaActual: Agencia = 'paraiso';
-let routerRepo = new ChromeRouterRepository(agenciaActual);
-let movRepo = new ChromeMovimientoRepository(agenciaActual);
+let routerRepo = new SupabaseRouterRepository(agenciaActual);
+let movRepo = new SupabaseMovimientoRepository(agenciaActual);
 const service = new RouterService(
   { getAll: () => routerRepo.getAll(), getBySerial: s => routerRepo.getBySerial(s), save: r => routerRepo.save(r), delete: id => routerRepo.delete(id) },
   { getAll: () => movRepo.getAll(), getBySerial: s => movRepo.getBySerial(s), save: m => movRepo.save(m) },
-  (a) => new ChromeRouterRepository(a),
-  (a) => new ChromeMovimientoRepository(a),
+  (a) => new SupabaseRouterRepository(a),
+  (a) => new SupabaseMovimientoRepository(a),
 );
 const elHistorialRevisiones = document.querySelector<HTMLDivElement>('#historial-revisiones')!;
 const elHistorialBody = document.querySelector<HTMLTableSectionElement>('#historial-body')!;
@@ -52,10 +58,21 @@ const elLoginUsuario = document.querySelector<HTMLSelectElement>('#login-usuario
 const elLoginPin = document.querySelector<HTMLInputElement>('#login-pin')!;
 const elLoginError = document.querySelector<HTMLParagraphElement>('#login-error')!;
 const elLoginBtn = document.querySelector<HTMLButtonElement>('#login-btn')!;
+const elBtnLimpiarFechas = document.querySelector<HTMLButtonElement>('#btn-limpiar-fechas')!;
 
 const SESSION_KEY = 'sesion-actual';
 const elUsuarioLabel = document.querySelector<HTMLSpanElement>('#usuario-label')!;
 const elBtnCerrarSesion = document.querySelector<HTMLButtonElement>('#btn-cerrar-sesion')!;
+const elFechaDesde = document.querySelector<HTMLInputElement>('#fecha-desde')!;
+const elFechaHasta = document.querySelector<HTMLInputElement>('#fecha-hasta')!;
+let rangoDesde = '';
+let rangoHasta = '';
+
+const elHistFechaDesde = document.querySelector<HTMLInputElement>('#hist-fecha-desde')!;
+const elHistFechaHasta = document.querySelector<HTMLInputElement>('#hist-fecha-hasta')!;
+const elBtnLimpiarFechasHist = document.querySelector<HTMLButtonElement>('#btn-limpiar-fechas-hist')!;
+let histRangoDesde = '';
+let histRangoHasta = '';
 
 interface Sesion {
   usuario: string;
@@ -155,7 +172,6 @@ const elBtnExportar = document.querySelector<HTMLButtonElement>('#btn-exportar')
 const elBtnImportar = document.querySelector<HTMLButtonElement>('#btn-importar')!;
 const elHistContador = document.querySelector<HTMLSpanElement>('#hist-contador')!;
 const elHistPagInfo = document.querySelector<HTMLSpanElement>('#hist-pag-info')!;
-let syncActivo = true;
 const elHistPagPrev = document.querySelector<HTMLButtonElement>('#hist-pag-prev')!;
 const elHistPagNext = document.querySelector<HTMLButtonElement>('#hist-pag-next')!;
 let histPage = 1;
@@ -209,22 +225,27 @@ async function init() {
       if (nueva === agenciaActual) return;
       agenciaActual = nueva;
       setAgenciaUI();
-      routerRepo = new ChromeRouterRepository(agenciaActual);
-      movRepo = new ChromeMovimientoRepository(agenciaActual);
+      routerRepo = new SupabaseRouterRepository(agenciaActual);
+      movRepo = new SupabaseMovimientoRepository(agenciaActual);
       selectedSerial = null;
       selectedMovId = null;
       seleccionMultiple.clear();
+      elFechaDesde.value = '';      // ← nueva
+      elFechaHasta.value = '';      // ← nueva
+      rangoDesde = '';              // ← nueva
+      rangoHasta = '';              // ← nueva
       actualizarOpcionesFiltro();
       actualizarBotonAgregar();
       await refresh();
-      void sincronizarConSheets();
+      if (desuscribir) desuscribir();
+      desuscribir = suscribirCambios(agenciaActual, () => {
+        void refresh();
+      });
+      modoDevolucion = false;
+      actualizarModoDevolucion();
     });
   });
-
-  // Cargar preferencia
-  const syncPref = await chrome.storage.local.get('syncActivo');
-  syncActivo = syncPref.syncActivo !== false;
-  
+    
   elBuscarHist.addEventListener('input', () => {
     histSearch = elBuscarHist.value.trim().toLowerCase();
     histPage = 1;
@@ -236,6 +257,44 @@ async function init() {
       const acc = btn.closest('.accordion');
       acc?.classList.toggle('abierto');
     });
+  });
+
+  elFechaDesde.addEventListener('change', () => {
+    rangoDesde = elFechaDesde.value;
+    currentPage = 1;
+    renderTabla();
+  });
+  elFechaHasta.addEventListener('change', () => {
+    rangoHasta = elFechaHasta.value;
+    currentPage = 1;
+    renderTabla();
+  });
+  elBtnLimpiarFechas.addEventListener('click', () => {
+    elFechaDesde.value = '';
+    elFechaHasta.value = '';
+    rangoDesde = '';
+    rangoHasta = '';
+    currentPage = 1;
+    renderTabla();
+  });
+
+  elHistFechaDesde.addEventListener('change', () => {
+    histRangoDesde = elHistFechaDesde.value;
+    histPage = 1;
+    void renderHistorialRevisiones();
+  });
+  elHistFechaHasta.addEventListener('change', () => {
+    histRangoHasta = elHistFechaHasta.value;
+    histPage = 1;
+    void renderHistorialRevisiones();
+  });
+  elBtnLimpiarFechasHist.addEventListener('click', () => {
+    elHistFechaDesde.value = '';
+    elHistFechaHasta.value = '';
+    histRangoDesde = '';
+    histRangoHasta = '';
+    histPage = 1;
+    void renderHistorialRevisiones();
   });
 
   elSalidaTecnico.replaceChildren(...TECNICOS.map(t => new Option(t, t)));
@@ -295,6 +354,19 @@ async function init() {
   elBtnLimpiarMulti.addEventListener('click', () => {
     seleccionMultiple.clear();
     renderTabla();
+  });
+
+  elBtnDevolverParaiso.addEventListener('click', () => {
+    modoDevolucion = !modoDevolucion;
+    actualizarModoDevolucion();
+  });
+
+  elBtnRegistrarSalida.addEventListener('click', () => {
+    if (modoDevolucion) {
+      void ejecutarDevolucion();
+    } else {
+      void registrarSalida();
+    }
   });
 
   elBtnImportar.addEventListener('click', importarExcel);
@@ -420,16 +492,6 @@ async function init() {
     elChipsFiltrosHist.replaceChildren(...chips);
   }
 
-  elCheckAll.addEventListener('change', () => {
-    const page = paginatedRouters();
-    if (elCheckAll.checked) {
-      page.forEach(r => seleccionMultiple.add(r.serial));
-    } else {
-      page.forEach(r => seleccionMultiple.delete(r.serial));
-    }
-    renderTabla();
-  });
-
   elBtnAgregar.addEventListener('click', agregarRouter);
   elBtnAsignarCliente.addEventListener('click', asignarCliente);
   elBtnRegistrarSalida.addEventListener('click', registrarSalida);
@@ -438,8 +500,24 @@ async function init() {
   elBtnRegistrarMerma.addEventListener('click', () => registrarRevision('merma'));
   elBtnExportar.addEventListener('click', () => {
     abrirExportModal(agenciaActual, async (tipos) => {
-      const movs = await movRepo.getAll();
-      generarExcel(tipos, routers, movs, agenciaActual);
+      const necesitaAmbas = tipos.some(t =>
+        t === 'general' || t === 'nuevos' || t === 'optimos'
+      );
+
+      let routersParaExport = routers;
+      let movsParaExport = await movRepo.getAll();
+
+      if (necesitaAmbas) {
+        const otra: Agencia = agenciaActual === 'paraiso' ? 'lomas' : 'paraiso';
+        const routerOtra = new SupabaseRouterRepository(otra);
+        const movOtra = new SupabaseMovimientoRepository(otra);
+        const routersOtra = await routerOtra.getAll();
+        const movsOtra = await movOtra.getAll();
+        routersParaExport = [...routers, ...routersOtra];
+        movsParaExport = [...movsParaExport, ...movsOtra];
+      }
+
+      generarExcel(tipos, routersParaExport, movsParaExport, agenciaActual);
     });
   });
 
@@ -465,17 +543,30 @@ async function init() {
   // 2. Render inmediato con caché local
   await refresh();
 
-  // 3. Sincronización en segundo plano (no bloquea la UI)
-  void sincronizarConSheets();
+  desuscribir = suscribirCambios(agenciaActual, () => {
+    void refresh();
+  });
 
-  setInterval(() => { void sincronizarConSheets(); }, 60_000);
+  function actualizarAnchoLayout() {
+    const w = document.documentElement.clientWidth;
+    document.body.classList.toggle('layout-sm', w < 480);
+    document.body.classList.toggle('layout-md', w >= 480 && w < 620);
+    document.body.classList.toggle('layout-lg', w >= 620);
+  }
+  actualizarAnchoLayout();
+
+  const ro = new ResizeObserver(actualizarAnchoLayout);
+  ro.observe(document.documentElement);
 }
 
 
 
 function mostrarLogin() {
   elLoginOverlay.hidden = false;
-  elLoginUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
+
+  void getUsuariosActivos().then(usuarios => {
+    elLoginUsuario.replaceChildren(...usuarios.map(u => new Option(u, u)));
+  });
 
   const intentar = async () => {
     const nombre = elLoginUsuario.value;
@@ -491,14 +582,10 @@ function mostrarLogin() {
     elLoginBtn.textContent = 'Verificando...';
 
     try {
-      const res = await chrome.runtime.sendMessage({
-        type: 'SHEETS',
-        accion: 'login',
-        payload: { nombre, pin },
-      });
+      const res = await loginSupabase(nombre, pin);
 
-      if (!res.ok || !res.data?.ok) {
-        elLoginError.textContent = res.data?.error ?? 'Error de conexión';
+      if (!res.ok) {
+        elLoginError.textContent = res.error ?? 'Error';
         elLoginBtn.disabled = false;
         elLoginBtn.textContent = 'Entrar';
         return;
@@ -520,14 +607,16 @@ function mostrarLogin() {
   elLoginPin.focus();
 
   elBtnIrCambiarPin.addEventListener('click', () => {
-  elLoginBox.hidden = true;
-  elCambiarPinBox.hidden = false;
-  elCpUsuario.replaceChildren(...USUARIOS.map(u => new Option(u, u)));
-  elCpPinViejo.value = '';
-  elCpPinNuevo.value = '';
-  elCpPinConfirmar.value = '';
-  elCpError.textContent = '';
-  elCpPinViejo.focus();
+    elLoginBox.hidden = true;
+    elCambiarPinBox.hidden = false;
+    void getUsuariosActivos().then(usuarios => {
+      elCpUsuario.replaceChildren(...usuarios.map(u => new Option(u, u)));
+    });
+    elCpPinViejo.value = '';
+    elCpPinNuevo.value = '';
+    elCpPinConfirmar.value = '';
+    elCpError.textContent = '';
+    elCpPinViejo.focus();
   });
 
   elCpVolver.addEventListener('click', () => {
@@ -560,14 +649,10 @@ function mostrarLogin() {
     elCpGuardar.textContent = 'Guardando...';
 
     try {
-      const res = await chrome.runtime.sendMessage({
-        type: 'SHEETS',
-        accion: 'cambiarPin',
-        payload: { nombre, pinViejo, pinNuevo },
-      });
+      const res = await cambiarPinSupabase(nombre, pinViejo, pinNuevo);
 
-      if (!res.ok || !res.data?.ok) {
-        elCpError.textContent = res.data?.error ?? 'Error de conexión';
+      if (!res.ok) {
+        elCpError.textContent = res.error ?? 'Error';
         elCpGuardar.disabled = false;
         elCpGuardar.textContent = 'Guardar';
         return;
@@ -599,11 +684,33 @@ async function enviarLomasMasivo() {
   }
 }
 
+function actualizarModoDevolucion() {
+  const activo = modoDevolucion;
+  elBtnDevolverParaiso.classList.toggle('activo', activo);
+  elBtnRegistrarSalida.textContent = activo ? 'Confirmar devolución' : 'Registrar salida';
+  elSalidaTecnico.disabled = activo;
+  elSalidaFecha.disabled = activo;
+  elSalidaMotivo.disabled = activo;
+}
+
+async function ejecutarDevolucion() {
+  if (!selectedSerial) return;
+  if (!confirm('¿Confirmar devolución a Paraíso? El router saldrá de Lomas.')) return;
+  try {
+    await service.devolverAParaiso({ serial: selectedSerial, usuario: usuarioActual });
+    modoDevolucion = false;
+    actualizarModoDevolucion();
+    selectedSerial = null;
+    await refresh();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Error al devolver');
+  }
+}
+
 async function importarExcel() {
   abrirImportModal(async (file) => {
     try {
       const { parseExcel } = await import('../domain/services/import-service');
-      const { pushBatch } = await import('../infrastructure/storage/sheets-sync');
 
       const payload = await parseExcel(file, agenciaActual);
 
@@ -617,8 +724,6 @@ async function importarExcel() {
       payload.routers.forEach(r => {
         const ex = mapaActual.get(r.serial);
         if (ex) {
-          // Actualizar estado si el import trae info más nueva
-          // (solo cuando viene de REVISADOS o cambia el estado)
           ex.estado = r.estado;
           ex.ubicacion = r.ubicacion;
           ex.tecnicoActual = r.tecnicoActual;
@@ -630,65 +735,47 @@ async function importarExcel() {
         }
       });
 
-      // Movimientos: solo los relevantes para routers que YA existen
       const tiposRelevantes = new Set(['retorno', 'revision', 'merma']);
       const movsNuevos = payload.movimientos.filter(m => {
         if (mapaActual.has(m.routerSerial)) {
           return tiposRelevantes.has(m.tipo);
         }
-        return true; // router nuevo → todos sus movimientos
+        return true;
       });
 
-      const saltados = routersActualizados.length;
-
-      if (routersNuevos.length === 0) {
-        console.log('Errores:', payload.errores);
+      if (routersNuevos.length === 0 && routersActualizados.length === 0) {
         alert(
-          `Importación completa.\n` +
-          `Routers creados: ${routersNuevos.length}\n` +
-          `Routers actualizados: ${routersActualizados.length}\n` +
-          `Movimientos: ${movsNuevos.length}\n` +
+          `Nada que importar.\n` +
           `Duplicados en Excel: ${payload.duplicados.length}\n` +
           `Errores: ${payload.errores.length}`
         );
         return;
       }
 
-      // Guardar local
-      const key = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
-      const todosRouters = [...actuales.filter(r => !routersActualizados.some(a => a.id === r.id)), ...routersActualizados, ...routersNuevos];
-      await chrome.storage.local.set({ [key]: todosRouters });
-
-      const items: any[] = [];
-      routersNuevos.forEach(r => items.push({ router: r, agencia: agenciaActual }));
-      routersActualizados.forEach(r => items.push({ router: r, agencia: agenciaActual }));
-      movsNuevos.forEach(m => items.push({ movimiento: m, agencia: agenciaActual }));
-
-      const CHUNK = 40;
-      for (let i = 0; i < items.length; i += CHUNK) {
-        await pushBatch(items.slice(i, i + CHUNK));
+      // Guardar routers en Supabase
+      for (const r of [...routersActualizados, ...routersNuevos]) {
+        await routerRepo.save(r);
       }
 
-      alert(`Importación completa.\nCreados: ${routersNuevos.length}\nSaltados: ${saltados}\nErrores: ${payload.errores.length}\n\nPrimeros 5:\n${payload.errores.slice(0, 5).join('\n')}`);
+      // Guardar movimientos en Supabase
+      const movRepoLocal = movRepo;
+      for (const m of movsNuevos) {
+        await movRepoLocal.save(m);
+      }
+
+      alert(
+        `Importación completa.\n` +
+        `Routers creados: ${routersNuevos.length}\n` +
+        `Routers actualizados: ${routersActualizados.length}\n` +
+        `Movimientos: ${movsNuevos.length}\n` +
+        `Duplicados en Excel: ${payload.duplicados.length}\n` +
+        `Errores: ${payload.errores.length}`
+      );
       await refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error al importar');
     }
   });
-}
-
-async function sincronizarConSheets() {
-  if (!syncActivo) return;
-  try {
-    const { pullTodo, hayPendientes } = await import('../infrastructure/storage/sheets-sync');
-    if (hayPendientes()) return;
-    const { routers: r, movimientos: m } = await pullTodo(agenciaActual);
-    const keyRouters = agenciaActual === 'lomas' ? 'routersLomas' : 'routers';
-    const keyMovs = agenciaActual === 'lomas' ? 'movimientosLomas' : 'movimientos';
-    await chrome.storage.local.set({ [keyRouters]: r, [keyMovs]: m });
-  } catch (e) {
-    console.debug('Sin conexión a Sheets', e);
-  }
 }
 
 // ── Datos ──────────────────────────────────────────────
@@ -765,6 +852,16 @@ function filteredRouters(): Router[] {
         if (iso !== f.fechaIngreso) return false;
       }
       if (f.soloOficina && r.ubicacion !== 'oficina') return false;
+      if (rangoDesde) {
+        const d = new Date(r.fechaIngreso);
+        const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (iso < rangoDesde) return false;
+      }
+      if (rangoHasta) {
+        const d = new Date(r.fechaIngreso);
+        const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (iso > rangoHasta) return false;
+      }
       return true;
     })
     .sort((a, b) => b.fechaIngreso - a.fechaIngreso);
@@ -777,7 +874,84 @@ function paginatedRouters(): Router[] {
 }
 
 // ── Render ─────────────────────────────────────────────
+type ColDef = { label: string; value: (r: Router) => string; prioridad: 1 | 2 | 3 };
+
+function getColumnas(): ColDef[] {
+  switch (currentFilter) {
+    case 'nuevo':
+      return [
+        { label: 'Serial', value: r => r.serial, prioridad: 1 },
+        { label: 'Tipo', value: r => getTipoLabel(r.tipo), prioridad: 1 },
+        { label: 'Fecha ingreso', value: r => formatDate(r.fechaIngreso), prioridad: 2 },
+        { label: 'Ubicación', value: r => getUbicacionLabel(r.ubicacion), prioridad: 2 },
+        { label: 'Lote', value: r => String(r.lote ?? '—'), prioridad: 3 },
+        { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
+        { label: 'Tecnología', value: r => r.tecnologia ?? '—', prioridad: 3 },
+        { label: 'Técnico', value: r => r.tecnicoActual ?? '—', prioridad: 3 },
+      ];
+    case 'optimo':
+      return [
+        { label: 'Serial', value: r => r.serial, prioridad: 1 },
+        { label: 'Tipo', value: r => getTipoLabel(r.tipo), prioridad: 1 },
+        { label: 'Fecha ingreso', value: r => formatDate(r.fechaIngreso), prioridad: 2 },
+        { label: 'Ubicación', value: r => getUbicacionLabel(r.ubicacion), prioridad: 2 },
+        { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
+        { label: 'Tecnología', value: r => r.tecnologia ?? '—', prioridad: 3 },
+        { label: 'Técnico', value: r => r.tecnicoActual ?? '—', prioridad: 3 },
+      ];
+    case 'en_revision':
+      return [
+        { label: 'Serial', value: r => r.serial, prioridad: 1 },
+        { label: 'Tipo', value: r => getTipoLabel(r.tipo), prioridad: 1 },
+        { label: 'Fecha ingreso', value: r => formatDate(r.fechaIngreso), prioridad: 2 },
+        { label: 'Motivo', value: r => motivosRetorno.get(r.serial) ?? '—', prioridad: 2 },
+        { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
+      ];
+    default:
+      return [];
+  }
+}
+
+function renderTablaHead() {
+  const head = document.querySelector<HTMLTableSectionElement>('#tabla-head')!;
+  const cols = getColumnas();
+  const puedeSeleccionarMultiple = currentFilter === 'nuevo' && agenciaActual === 'paraiso';
+
+  const tr = document.createElement('tr');
+
+  if (puedeSeleccionarMultiple) {
+    const th = document.createElement('th');
+    th.className = 'col-check';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = 'check-all';
+    th.append(cb);
+    tr.append(th);
+  }
+
+  cols.forEach(c => {
+    const th = document.createElement('th');
+    th.textContent = c.label;
+    th.classList.add(`col-p${c.prioridad}`);
+    tr.append(th);
+  });
+
+  head.replaceChildren(tr);
+
+  const checkAll = document.getElementById('check-all') as HTMLInputElement | null;
+  if (checkAll) {
+    checkAll.addEventListener('change', () => {
+      const page = paginatedRouters();
+      if (checkAll.checked) page.forEach(r => seleccionMultiple.add(r.serial));
+      else page.forEach(r => seleccionMultiple.delete(r.serial));
+      renderTabla();
+    });
+  }
+}
+
 function renderTabla() {
+  renderTablaHead();
+
   const list = filteredRouters();
   const page = paginatedRouters();
   const total = list.length;
@@ -790,17 +964,16 @@ function renderTabla() {
   elPagNext.disabled = currentPage >= totalPages;
 
   const puedeSeleccionarMultiple = currentFilter === 'nuevo' && agenciaActual === 'paraiso';
-
-  const thLote = document.querySelector<HTMLTableCellElement>('.tabla-wrap .tabla thead th:nth-child(2)');
-    if (thLote) thLote.textContent = currentFilter === 'en_revision' ? 'Motivo' : 'Lote';
+  const cols = getColumnas();
 
   elTablaBody.replaceChildren(
     ...page.map(r => {
       const tr = document.createElement('tr');
       if (r.serial === selectedSerial) tr.classList.add('selected');
 
-      const tdCheck = document.createElement('td');
       if (puedeSeleccionarMultiple) {
+        const tdCheck = document.createElement('td');
+        tdCheck.className = 'col-check';
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = seleccionMultiple.has(r.serial);
@@ -812,25 +985,15 @@ function renderTabla() {
           renderDetalle();
         });
         tdCheck.append(cb);
+        tr.append(tdCheck);
       }
-      tr.append(tdCheck);
 
-      const tdLote = document.createElement('td');
-        if (currentFilter === 'en_revision') {
-          tdLote.textContent = motivosRetorno.get(r.serial) ?? '—';
-        } else {
-          tdLote.textContent = r.lote ?? '—';
-        }
-      const tdFecha = document.createElement('td');
-      tdFecha.textContent = formatDate(r.fechaIngreso);
-      const tdSerial = document.createElement('td');
-      tdSerial.textContent = r.serial;
-      const tdTipo = document.createElement('td');
-      tdTipo.textContent = getTipoLabel(r.tipo);
-      const tdEstado = document.createElement('td');
-      tdEstado.textContent = getEstadoLabel(r.estado);
-
-      tr.append(tdLote, tdFecha, tdSerial, tdTipo, tdEstado);
+      cols.forEach(c => {
+        const td = document.createElement('td');
+        td.textContent = c.value(r);
+        td.classList.add(`col-p${c.prioridad}`);
+        tr.append(td);
+      });
 
       tr.addEventListener('click', () => {
         selectedSerial = (selectedSerial === r.serial) ? null : r.serial;
@@ -841,7 +1004,6 @@ function renderTabla() {
     }),
   );
 
-  // Barra múltiple
   const n = seleccionMultiple.size;
   if (n > 0) {
     elBarraMultiple.hidden = false;
@@ -850,13 +1012,10 @@ function renderTabla() {
     elBarraMultiple.hidden = true;
   }
 
-  // Check "todos"
-  if (puedeSeleccionarMultiple && page.length > 0) {
-    elCheckAll.disabled = false;
-    elCheckAll.checked = page.every(r => seleccionMultiple.has(r.serial));
-  } else {
-    elCheckAll.disabled = true;
-    elCheckAll.checked = false;
+  const checkAll = document.getElementById('check-all') as HTMLInputElement | null;
+  if (checkAll) {
+    checkAll.disabled = !puedeSeleccionarMultiple || page.length === 0;
+    checkAll.checked = page.length > 0 && page.every(r => seleccionMultiple.has(r.serial));
   }
 }
 
@@ -902,6 +1061,8 @@ async function renderDetalle() {
     elBtnAsignarCliente.hidden = true;
     elAccInfo.hidden = true;
     elAccSalida.hidden = true;
+    elFormDesasignar.hidden = true;
+    elBtnDevolverParaiso.hidden = true;
     return;
   }
 
@@ -919,9 +1080,19 @@ async function renderDetalle() {
   `;
 
   elBtnAsignarCliente.hidden = router.estado === 'en_revision';
-  elFormDesasignar.hidden = router.ubicacion !== 'campo';
+  elFormDesasignar.hidden = router.ubicacion !== 'campo' || !!router.clienteActual;
   elAccInfo.hidden = false;
   elAccSalida.hidden = false;
+
+  const esLomas = agenciaActual === 'lomas';
+  const enOficina = router.ubicacion === 'oficina';
+  const puedeDevolver = esLomas && enOficina;
+  elBtnDevolverParaiso.hidden = !puedeDevolver;
+
+  if (!puedeDevolver && modoDevolucion) {
+    modoDevolucion = false;
+    actualizarModoDevolucion();
+  }
 
   const btnCopy = elDetalleInfo.querySelector<HTMLButtonElement>('.btn-copy');
   btnCopy?.addEventListener('click', async () => {
@@ -962,13 +1133,16 @@ function renderStock() {
       div.className = 'stock-item';
       const alertaClass = s.alerta === 'ok' ? 'ok' : s.alerta === 'bajo' ? 'bajo' : 'agotado';
       div.innerHTML = `
-        <div class="nombre">${getTipoLabel(s.tipo)}</div>
-        ${enRevision ? '' : `<div class="dot ${alertaClass}"></div>`}
-        <div class="num">${s.cantidad}</div>
+        ${enRevision ? '<span></span>' : `<span class="dot ${alertaClass}"></span>`}
+        <span class="nombre">${getTipoLabel(s.tipo)}</span>
+        <span class="num">${s.cantidad}</span>
       `;
       return div;
     }),
   );
+
+  const total = stock.reduce((acc, s) => acc + s.cantidad, 0);
+  document.getElementById('stock-total-num')!.textContent = String(total);
 }
 
 async function renderHistorialRevisiones() {
@@ -997,11 +1171,21 @@ async function renderHistorialRevisiones() {
         const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         if (iso !== f.fechaRevision) return false;
       }
+      if (histRangoDesde) {
+        const d = new Date(m.fecha);
+        const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (iso < histRangoDesde) return false;
+      }
+      if (histRangoHasta) {
+        const d = new Date(m.fecha);
+        const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (iso > histRangoHasta) return false;
+      }
       return true;
     })
     .sort((a, b) => b.fecha - a.fecha);
 
-  if (currentFilter !== 'en_revision' || revisiones.length === 0) {
+  if (currentFilter !== 'en_revision') {
     elAccHistorial.hidden = true;
     elHistorialDetalle.hidden = true;
     return;
@@ -1021,18 +1205,47 @@ async function renderHistorialRevisiones() {
   elHistPagPrev.disabled = histPage <= 1;
   elHistPagNext.disabled = histPage >= totalPages;
 
+  const head = document.querySelector<HTMLTableSectionElement>('#historial-head')!;
+  const colsHist = [
+    { label: 'Serial', prioridad: 1 },
+    { label: 'Tipo', prioridad: 1 },
+    { label: 'Estado', prioridad: 1 },
+    { label: 'Revisado el', prioridad: 2 },
+    { label: 'Ingresado el', prioridad: 3 },
+  ];
+  head.replaceChildren(
+    (() => {
+      const tr = document.createElement('tr');
+      colsHist.forEach(c => {
+        const th = document.createElement('th');
+        th.textContent = c.label;
+        th.classList.add(`col-p${c.prioridad}`);
+        tr.append(th);
+      });
+      return tr;
+    })(),
+  );
+
   elHistorialBody.replaceChildren(
     ...page.map(m => {
-      const router = routers.find(r => r.serial === m.routerSerial);
       const tr = document.createElement('tr');
       if (m.id === selectedMovId) tr.classList.add('selected');
-      tr.innerHTML = `
-        <td>${router?.lote ?? '—'}</td>
-        <td>${formatDate(m.fecha)}</td>
-        <td>${m.routerSerial}</td>
-        <td>${m.routerTipo ? getTipoLabel(m.routerTipo) : '—'}</td>
-        <td>${m.resultado === 'optimo' ? 'Revisado' : 'Merma'}</td>
-      `;
+
+      const mkTd = (texto: string, prioridad: 1 | 2 | 3) => {
+        const td = document.createElement('td');
+        td.textContent = texto;
+        td.classList.add(`col-p${prioridad}`);
+        return td;
+      };
+
+      tr.append(
+        mkTd(m.routerSerial, 1),
+        mkTd(m.routerTipo ? getTipoLabel(m.routerTipo) : '—', 1),
+        mkTd(m.resultado === 'optimo' ? 'Revisado' : 'Merma', 1),
+        mkTd(formatDate(m.fecha), 2),
+        mkTd(m.fechaRetorno ? formatDate(m.fechaRetorno) : '—', 3),
+      );
+
       tr.addEventListener('click', () => {
         selectedMovId = m.id;
         void renderHistorialRevisiones();
@@ -1090,6 +1303,16 @@ async function asignarCliente() {
   const router = routers.find(r => r.serial === selectedSerial);
   if (!router) return;
   elFormDesasignar.hidden = true;
+
+  const esLomas = agenciaActual === 'lomas';
+  const enOficina = router.ubicacion === 'oficina';
+  const puedeDevolver = esLomas && enOficina;
+
+  elBtnDevolverParaiso.hidden = !puedeDevolver;
+  if (!puedeDevolver && modoDevolucion) {
+    modoDevolucion = false;
+    actualizarModoDevolucion();
+  }
 
   abrirClienteModal(router.clienteActual, async (data) => {
     try {

@@ -69,10 +69,10 @@ export class RouterService {
     serial: string;
     tipo: TipoRouter;
     fabricante?: string;
-    cliente: string;
-    tecnico: string;
-    motivo: string;
-    destino: 'optimo' | 'a_revisar';
+    cliente?: string;
+    tecnico?: string;
+    motivo?: string;
+    destino: 'optimo' | 'a_revisar' | 'segunda';
     usuario: string;
     agencia: Agencia;
   }): Promise<Router> {
@@ -90,7 +90,6 @@ export class RouterService {
     const nuevoEstado: EstadoRouter =
       params.destino === 'optimo' ? 'optimo' : 'en_revision';
 
-    // Detectamos si viene de Lomas (por si hay clon allá)
     const routerLomasRepo = this.getRouterRepo('lomas');
     const movLomasRepo = this.getMovRepo('lomas');
     const clonLomas = await routerLomasRepo.getBySerial(params.serial);
@@ -99,8 +98,8 @@ export class RouterService {
     if (router) {
       router.estado = nuevoEstado;
       router.ubicacion = 'oficina';
-      router.clienteActual = params.cliente;
-      router.tecnicoActual = params.tecnico;
+      router.clienteActual = params.cliente ?? undefined;
+      router.tecnicoActual = params.tecnico ?? undefined;
       router.agencia = params.agencia;
       if (params.fabricante) router.fabricante = params.fabricante;
       router.actualizadoEn = ahora;
@@ -113,8 +112,8 @@ export class RouterService {
         ubicacion: 'oficina',
         agencia: params.agencia,
         fabricante: params.fabricante,
-        clienteActual: params.cliente,
-        tecnicoActual: params.tecnico,
+        clienteActual: params.cliente ?? undefined,
+        tecnicoActual: params.tecnico ?? undefined,
         fechaIngreso: ahora,
         creadoEn: ahora,
         actualizadoEn: ahora,
@@ -129,7 +128,6 @@ export class RouterService {
       agenciaOrigen,
     });
 
-    // Si estaba en Lomas, eliminar el clon y registrar movimiento espejo
     if (clonLomas) {
       await routerLomasRepo.delete(clonLomas.id);
       const movEspejo: Movimiento = {
@@ -271,17 +269,19 @@ export class RouterService {
     seriales: string[];
     usuario: string;
   }): Promise<{ exitosos: number; fallidos: number }> {
-    const { pushBatch } = await import('../../infrastructure/storage/sheets-sync');
-    const batch: any[] = [];
+    const routerLomas = this.getRouterRepo('lomas');
+    const movLomas = this.getMovRepo('lomas');
     let exitosos = 0;
 
     for (const serial of params.seriales) {
       const router = await this.routers.getBySerial(serial);
       if (!router) continue;
 
-      router.agencia = 'lomas';
+      const ahora = Date.now();
+
+      // Original: sigue en Paraíso, solo sale de oficina
       router.ubicacion = null;
-      router.actualizadoEn = Date.now();
+      router.actualizadoEn = ahora;
       await this.routers.save(router);
 
       const mov: Movimiento = {
@@ -291,17 +291,20 @@ export class RouterService {
         routerTipo: router.tipo,
         agencia: 'lomas',
         usuario: params.usuario,
-        fecha: Date.now(),
+        fecha: ahora,
       };
+      await this.movimientos.save(mov);
 
       const clon: Router = {
         ...router,
         id: crypto.randomUUID(),
         agencia: 'lomas',
         ubicacion: 'oficina',
-        creadoEn: Date.now(),
-        actualizadoEn: Date.now(),
+        tecnicoActual: undefined,
+        creadoEn: ahora,
+        actualizadoEn: ahora,
       };
+      await routerLomas.save(clon);
 
       const movEspejo: Movimiento = {
         id: crypto.randomUUID(),
@@ -310,19 +313,13 @@ export class RouterService {
         routerTipo: clon.tipo,
         agencia: 'paraiso',
         usuario: params.usuario,
-        fecha: Date.now(),
+        fecha: ahora,
       };
+      await movLomas.save(movEspejo);
 
-      batch.push(
-        { router, agencia: 'paraiso' },
-        { movimiento: mov, agencia: 'paraiso' },
-        { router: clon, agencia: 'lomas' },
-        { movimiento: movEspejo, agencia: 'lomas' },
-      );
       exitosos++;
     }
 
-    if (batch.length > 0) await pushBatch(batch);
     return { exitosos, fallidos: params.seriales.length - exitosos };
   }
 
@@ -334,7 +331,7 @@ export class RouterService {
     const router = await this.routers.getBySerial(params.serial);
     if (!router) throw new Error(`Serial ${params.serial} no existe`);
 
-    router.agencia = 'lomas';
+    // Original: sigue en Paraíso, solo sale de oficina
     router.ubicacion = null;
     router.tecnicoActual = params.tecnico;
     router.actualizadoEn = Date.now();
@@ -345,8 +342,9 @@ export class RouterService {
       tecnico: params.tecnico,
     });
 
-    const routerLomas = this.getRouterRepo('lomas');
-    const movLomas = this.getMovRepo('lomas');
+    // Clon en Lomas
+    const routerLomasRepo = this.getRouterRepo('lomas');
+    const movLomasRepo = this.getMovRepo('lomas');
     const ahora = Date.now();
     const clon: Router = {
       ...router,
@@ -357,7 +355,7 @@ export class RouterService {
       creadoEn: ahora,
       actualizadoEn: ahora,
     };
-    await routerLomas.save(clon);
+    await routerLomasRepo.save(clon);
 
     const movEspejo: Movimiento = {
       id: crypto.randomUUID(),
@@ -369,6 +367,71 @@ export class RouterService {
       usuario: params.usuario,
       fecha: ahora,
     };
-    await movLomas.save(movEspejo);
+    await movLomasRepo.save(movEspejo);
+  }
+
+  async devolverAParaiso(params: {
+    serial: string;
+    usuario: string;
+  }): Promise<void> {
+    // Clon en Lomas (el repo actual es Lomas)
+    const clon = await this.routers.getBySerial(params.serial);
+    if (!clon) throw new Error(`Serial ${params.serial} no existe en esta agencia`);
+
+    const routerParaisoRepo = this.getRouterRepo('paraiso');
+    const movParaisoRepo = this.getMovRepo('paraiso');
+    const movLomasRepo = this.getMovRepo('lomas');
+
+    const original = await routerParaisoRepo.getBySerial(params.serial);
+
+    const ahora = Date.now();
+
+    // 1. Borrar clon de Lomas
+    await this.routers.delete(clon.id);
+
+    // 2. Reactivar original en Paraíso
+    if (original) {
+      original.ubicacion = 'oficina';
+      original.clienteActual = undefined;
+      original.tecnicoActual = undefined;
+      original.actualizadoEn = ahora;
+      await routerParaisoRepo.save(original);
+    } else {
+      // Por si el original no existe (raro)
+      const nuevo: Router = {
+        ...clon,
+        id: crypto.randomUUID(),
+        agencia: 'paraiso',
+        ubicacion: 'oficina',
+        clienteActual: undefined,
+        tecnicoActual: undefined,
+        actualizadoEn: ahora,
+      };
+      await routerParaisoRepo.save(nuevo);
+    }
+
+    // 3. Movimiento en Paraíso
+    const movParaiso: Movimiento = {
+      id: crypto.randomUUID(),
+      tipo: 'devolucion_paraiso',
+      routerSerial: params.serial,
+      routerTipo: clon.tipo,
+      agencia: 'paraiso',
+      usuario: params.usuario,
+      fecha: ahora,
+    };
+    await movParaisoRepo.save(movParaiso);
+
+    // 4. Movimiento espejo en Lomas
+    const movLomas: Movimiento = {
+      id: crypto.randomUUID(),
+      tipo: 'devolucion_paraiso',
+      routerSerial: params.serial,
+      routerTipo: clon.tipo,
+      agencia: 'lomas',
+      usuario: params.usuario,
+      fecha: ahora,
+    };
+    await movLomasRepo.save(movLomas);
   }
 }

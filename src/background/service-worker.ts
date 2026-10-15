@@ -358,38 +358,3 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
   void updateDockAppFavicon(tabId, changeInfo.favIconUrl);
 });
-
-const SHEETS_URL =
-  'https://script.google.com/macros/s/AKfycbxE9PyPbxc7oFE6h1mFWc2TiDKMy9uF-W45EtlHvphCN74FFInXh4Vxlv4obFTdGH0/exec';
-
-chrome.runtime.onMessage.addListener(
-  (req: SheetsRequest, _sender, sendResponse: (r: SheetsResponse) => void) => {
-    if (req.type !== 'SHEETS') return false;
-
-    (async () => {
-      try {
-        let res: Response;
-        if (req.accion === 'getAll') {
-          const agencia = (req.payload as { agencia?: string })?.agencia ?? 'paraiso';
-          res = await fetch(`${SHEETS_URL}?agencia=${agencia}`);
-        } else {
-          res = await fetch(SHEETS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-              accion: req.accion,
-              ...(req.payload as object ?? {}),
-            }),
-            redirect: 'follow',
-          });
-        }
-        const data = await res.json();
-        sendResponse({ ok: true, data });
-      } catch (e) {
-        sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
-      }
-    })();
-
-    return true; // mantener el canal abierto para respuesta async
-  },
-);

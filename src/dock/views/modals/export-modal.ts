@@ -2,7 +2,7 @@ import { abrirModal } from './modal-base';
 import type { Agencia } from '../../../domain/entities/router';
 
 export type ExportTipo =
-  | 'general' | 'nuevos' | 'optimos' | 'revisados' | 'retorno' | 'merma'
+  | 'general' | 'nuevos' | 'optimos' | 'revisados' | 'retorno' | 'a_revisar'| 'merma'
   | 'cierre_mes';
 
 export function abrirExportModal(
@@ -15,6 +15,7 @@ export function abrirExportModal(
     { id: 'cierre_mes', label: 'Cierre del mes (solo oficina)', rol: 'cierre' },
     { id: 'general', label: 'General (todas las categorías)', rol: 'general' },
     { id: 'nuevos', label: 'Nuevos', rol: 'especifico' },
+    { id: 'a_revisar', label: 'A revisar', rol: 'especifico' },
     { id: 'optimos', label: 'Óptimos', rol: 'especifico' },
     { id: 'revisados', label: 'Revisados', rol: 'especifico' },
     { id: 'retorno', label: 'Retorno', rol: 'especifico' },

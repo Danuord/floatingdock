@@ -12,7 +12,8 @@ export type TipoMovimiento =
   | 'desasignacion'
   | 'transferencia_lomas'
   | 'entrada_lomas'
-  | 'importacion_optimo';
+  | 'importacion_optimo'
+  | 'devolucion_paraiso';
 
 export interface Movimiento {
   id: string;
@@ -23,7 +24,7 @@ export interface Movimiento {
   cliente?: string;
   tecnico?: string;
   motivo?: string;
-  destino?: 'optimo' | 'a_revisar';
+  destino?: 'optimo' | 'a_revisar' | 'segunda';
   detalle?: string;
   resultado?: 'optimo' | 'merma';
   fechaRetorno?: number;

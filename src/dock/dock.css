@@ -321,7 +321,7 @@ body {
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  font-size: 10px;
+  font-size: 11px;
   background: var(--surface);
   border-radius: var(--radius);
   overflow: hidden;
@@ -332,13 +332,14 @@ body {
   color: var(--primary);
   font-weight: 600;
   text-align: left;
-  padding: 6px 6px;
-  font-size: 11px;
+  padding: 7px 7px;
+  font-size: 12px;
   letter-spacing: 0.3px;
   border-bottom: 1px solid var(--border);
 }
 .tabla td {
-  padding: 5px 5px;
+  padding: 7px 7px;
+  text-align: left;
   border-bottom: 0px solid var(--border);
   color: var(--text);
   white-space: nowrap;
@@ -360,6 +361,8 @@ body {
   padding: 8px 4px;
   font-size: 10px;
   color: var(--text-muted);
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .paginacion {
   display: flex;
@@ -384,45 +387,76 @@ body {
 /* ── 8. Stock widget ──────────────────────────────────── */
 .stock-widget {
   margin: 10px 14px;
-  padding: 12px;
+  padding: 16px 20px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   flex-shrink: 0;
 }
 .stock-widget[hidden] { display: none !important; }
+
+.stock-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
 .stock-lista {
   display: flex;
-  justify-content: space-around;
-  gap: 8px;
-}
-.stock-item {
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 12px;
   flex: 1;
 }
-.stock-item .nombre {
+
+.stock-item {
+  display: grid;
+  grid-template-columns: 14px auto 1fr auto;
+  align-items: center;
+  gap: 10px;
   font-size: 10px;
-  color: var(--text-muted);
+}
+.stock-item .nombre {
+  color: var(--text);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
+  font-weight: 600;
 }
 .stock-item .num {
-  font-size: 18px;
   font-weight: 700;
+  font-size: 11px;
   color: var(--text);
 }
+
 .dot {
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   display: inline-block;
 }
 .dot.ok { background: var(--success); }
 .dot.bajo { background: var(--warning); }
 .dot.agotado { background: var(--danger); }
+
+.stock-total {
+  text-align: right;
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+  min-width: 90px;
+}
+.total-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.total-num {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-top: 6px;
+}
 
 /* ── 9. Acordeones ────────────────────────────────────── */
 .accordion {
@@ -725,9 +759,8 @@ body {
 .bottom-bar {
   display: flex;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 0px 10px 14px;
   background: var(--surface);
-  border-top: 1px solid var(--border);
   margin-top: auto;
   flex-shrink: 0;
 }
@@ -1003,4 +1036,124 @@ select:focus {
 }
 .scroll-area::-webkit-scrollbar-thumb:hover {
   background: var(--secondary-dark);
+}
+
+.fila[hidden] { display: none !important; }
+
+.agent-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--surface);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.agent-bar .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.agent-bar strong {
+  font-weight: 600;
+}
+
+.fecha-rango {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.fecha-rango input[type="date"] {
+  font-size: 10px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  width: 105px;
+}
+.fecha-rango input[type="date"]:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.fecha-rango button {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.fecha-rango button:hover { color: var(--danger); }
+
+.tabla
+.tabla td,
+.tabla th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabla th.col-check,
+.tabla td.col-check {
+  text-overflow: clip;
+  padding: 7px 7px;
+  text-align: center;
+  width: 24px;
+  border: none;
+  line-height: 0;
+}
+
+.btn-devolver {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-devolver:hover {
+  background: var(--primary-light);
+}
+.btn-devolver.activo {
+  background: var(--primary);
+  color: #fff;
+}
+.btn-devolver[hidden] { display: none !important; }
+
+/* Columnas adaptativas */
+body.layout-sm .col-p2,
+body.layout-sm .col-p3 {
+  display: none;
+}
+
+body.layout-md .col-p3 {
+  display: none;
+}
+
+body.layout-lg .col-p1,
+body.layout-lg .col-p2,
+body.layout-lg .col-p3 {
+  display: table-cell;
+} 
+
+.tabla th:first-child:not(.col-check),
+.tabla td:first-child:not(.col-check) {
+  padding-left: 14px;
 }

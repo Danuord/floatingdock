@@ -29,16 +29,6 @@
   </div>
 
   <body>
-  <nav class="tabs">
-    <button class="tab active" data-tab="routers">Routers</button>
-    <button class="tab" data-tab="materiales" disabled>Materiales</button>
-    <button class="tab" data-tab="ferreteria" disabled>Ferretería</button>
-    <div class="agent-info">
-      <span class="status-dot"></span>
-      <strong id="usuario-label"></strong>
-    </div>
-  </nav>
-
   <header class="top-bar">
     <select id="filtro-estado" class="vista-select">
       <option value="nuevo" data-opcion="nuevo">Nuevos</option>
@@ -46,7 +36,7 @@
       <option value="en_revision" data-opcion="en_revision">A revisar</option>
     </select>
     <div class="agencia-pill" id="agencia-pill">
-      <button data-agencia="paraiso">Paraíso</button>
+      <button data-agencia="paraiso">Paraiso</button>
       <button data-agencia="lomas">Lomas</button>
     </div>
   </header>
@@ -75,21 +65,17 @@
       </div>
 
       <table class="tabla">
-        <thead>
-          <tr>
-            <th style="width:24px;"><input type="checkbox" id="check-all" /></th>
-            <th>Lote</th>
-            <th>Fecha ingreso</th>
-            <th>Serial</th>
-            <th>Tipo</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
+      <thead id="tabla-head"></thead>
         <tbody id="tabla-body"></tbody>
       </table>
 
       <div class="tabla-footer">
-        <span id="contador">Mostrando 0 de 0</span>
+      <div class="fecha-rango">
+        <input id="fecha-desde" type="date" />
+        <input id="fecha-hasta" type="date" />
+        <button id="btn-limpiar-fechas" type="button" title="Limpiar fechas">×</button>
+      </div>
+      <span id="contador">Mostrando 0 de 0</span>
         <div class="paginacion">
           <button id="pag-prev" type="button">◀</button>
           <span id="pag-info">1</span>
@@ -99,7 +85,13 @@
     </section>
 
     <section class="stock-widget">
-      <div id="stock-lista" class="stock-lista"></div>
+      <div class="stock-grid">
+        <div id="stock-lista" class="stock-lista"></div>
+        <div class="stock-total">
+          <div class="total-label">TOTAL</div>
+          <div id="stock-total-num" class="total-num">0</div>
+        </div>
+      </div>
     </section>
 
     <div class="accordion" id="acc-info">
@@ -154,6 +146,7 @@
               </select>
             </div>
           </div>
+          <button id="btn-devolver-paraiso" type="button" class="btn-devolver" hidden>Devolución a Paraíso</button>
           <button id="btn-registrar-salida" type="button" class="btn-registrar-full">Registrar salida</button>
         </div>
       </div>
@@ -215,18 +208,15 @@
           </div>
           <div id="chips-filtros-hist" class="chips-filtros" hidden></div>
           <table class="tabla">
-            <thead>
-              <tr>
-                <th>Lote</th>
-                <th>Fecha</th>
-                <th>Serial</th>
-                <th>Tipo</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
+          <thead id="historial-head"></thead>
             <tbody id="historial-body"></tbody>
           </table>
           <div class="tabla-footer">
+            <div class="fecha-rango">
+              <input id="hist-fecha-desde" type="date" />
+              <input id="hist-fecha-hasta" type="date" />
+              <button id="btn-limpiar-fechas-hist" type="button" title="Limpiar fechas">×</button>
+            </div>
             <span id="hist-contador">Mostrando 0 de 0</span>
             <div class="paginacion">
               <button id="hist-pag-prev" type="button">◀</button>
@@ -241,6 +231,11 @@
     <div id="historial-detalle" class="historial-detalle" hidden></div>
 
   </main>
+
+  <div class="agent-bar">
+    <span class="status-dot"></span>
+    <strong id="usuario-label"></strong>
+  </div>
 
   <div id="modal-root"></div>
 

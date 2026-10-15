@@ -8,10 +8,11 @@ export interface RetornoModalResult {
   serial: string;
   tipo: TipoRouter;
   fabricante?: string;
-  cliente: string;
-  tecnico: string;
-  motivo: string;
-  destino: 'optimo' | 'a_revisar';
+  cliente?: string;
+  tecnico?: string;
+  motivo?: string;
+  destino: 'optimo' | 'a_revisar' | 'segunda';
+  esAgente?: boolean;
 }
 
 export function abrirRetornoModal(
@@ -53,18 +54,39 @@ export function abrirRetornoModal(
   selectDestino.append(
     new Option('Óptimo', 'optimo'),
     new Option('A revisar', 'a_revisar'),
+    new Option('Router de segunda', 'segunda'),
   );
   selectDestino.value = destinoInicial;
+
+  // Campos opcionales en modo "Agente"
+  const filaCliente = campo('Cliente *', inputCliente);
+  const filaTecnico = campo('Técnico *', selectTecnico);
+  const filaMotivo = campo('Motivo *', selectMotivo);
+
+  // Checkbox "Agente"
+  const checkWrapper = document.createElement('label');
+  checkWrapper.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 0 4px;font-size:12px;cursor:pointer;border-top:1px solid #eee;margin-top:8px;';
+  const checkAgente = document.createElement('input');
+  checkAgente.type = 'checkbox';
+  checkWrapper.append(checkAgente, document.createTextNode('Agente'));
 
   form.append(
     campo('Serial *', inputSerial),
     campo('Tipo *', selectTipo),
     campo('Fabricante', inputFabricante),
-    campo('Cliente *', inputCliente),
-    campo('Técnico *', selectTecnico),
-    campo('Motivo *', selectMotivo),
+    filaCliente,
+    filaTecnico,
+    filaMotivo,
     campo('Destino *', selectDestino),
+    checkWrapper,
   );
+
+  checkAgente.addEventListener('change', () => {
+    const esAgente = checkAgente.checked;
+    filaCliente.hidden = esAgente;
+    filaTecnico.hidden = esAgente;
+    filaMotivo.hidden = esAgente;
+  });
 
   inputSerial.addEventListener('input', () => {
     const detectado = detectarFabricante(inputSerial.value);
@@ -77,18 +99,21 @@ export function abrirRetornoModal(
     textoAceptar: 'Registrar',
     onAceptar: async () => {
       const serial = inputSerial.value.trim();
-      const cliente = inputCliente.value.trim();
       if (!serial) { alert('Serial requerido'); return; }
-      if (!cliente) { alert('Cliente requerido'); return; }
+
+      const esAgente = checkAgente.checked;
+      const cliente = inputCliente.value.trim();
+      if (!esAgente && !cliente) { alert('Cliente requerido'); return; }
 
       await onSubmit({
         serial,
         tipo: selectTipo.value as TipoRouter,
         fabricante: inputFabricante.value.trim() || undefined,
-        cliente,
-        tecnico: selectTecnico.value,
-        motivo: selectMotivo.value,
-        destino: selectDestino.value as 'optimo' | 'a_revisar',
+        cliente: esAgente ? undefined : cliente,
+        tecnico: esAgente ? undefined : selectTecnico.value,
+        motivo: esAgente ? undefined : selectMotivo.value,
+        destino: selectDestino.value as 'optimo' | 'a_revisar' | 'segunda',
+        esAgente,
       });
 
       cerrar();

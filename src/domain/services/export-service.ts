@@ -116,7 +116,7 @@ function hojaRevisados(routers: Router[], movs: Movimiento[]): any[] {
 
 function hojaRetorno(movs: Movimiento[]): any[] {
   return movs
-    .filter(m => m.tipo === 'retorno')
+    .filter(m => m.tipo === 'retorno' && m.destino !== 'segunda')
     .map(m => ({
       SERIAL: m.routerSerial,
       TIPO: m.routerTipo ? TIPO_LABEL[m.routerTipo] : '',
@@ -147,6 +147,26 @@ function hojaMerma(routers: Router[], movs: Movimiento[]): any[] {
   });
 }
 
+function hojaARevisar(routers: Router[], movs: Movimiento[]): any[] {
+  return routers
+    .filter(r => r.estado === 'en_revision')
+    .map(r => {
+      const retorno = ultimoMov(movs, r.serial, ['retorno']);
+      return {
+        SERIAL: r.serial,
+        TIPO: TIPO_LABEL[r.tipo],
+        ESTADO: 'En revisión',
+        AGENCIA: AGENCIA_LABEL[r.agencia],
+        FABRICANTE: r.fabricante ?? '',
+        TECNOLOGIA: r.tecnologia ?? '',
+        FECHA_INGRESO: fmt(r.fechaIngreso),
+        MOTIVO: retorno?.motivo ?? '',
+        CLIENTE_ANTERIOR: retorno?.cliente ?? '',
+        TECNICO: retorno?.tecnico ?? '',
+      };
+    });
+}
+
 export function generarExcel(
   tipos: ExportTipo[],
   routers: Router[],
@@ -163,6 +183,7 @@ export function generarExcel(
     retorno: () => ({ nombre: 'Retorno', data: hojaRetorno(movs) }),
     merma: () => ({ nombre: 'Merma', data: hojaMerma(routers, movs) }),
     cierre_mes: () => ({ nombre: 'Cierre del mes', data: [] }),
+    a_revisar: () => ({ nombre: 'A revisar', data: hojaARevisar(routers, movs) }),
   };
 
   tipos.forEach(t => {
