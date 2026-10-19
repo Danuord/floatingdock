@@ -295,31 +295,34 @@ export class RouterService {
       };
       await this.movimientos.save(mov);
 
+      const existenteLomas = await routerLomas.getBySerial(router.serial);
+
       const clon: Router = {
         ...router,
-        id: crypto.randomUUID(),
+        id: existenteLomas ? existenteLomas.id : crypto.randomUUID(),
         agencia: 'lomas',
         ubicacion: 'oficina',
         tecnicoActual: undefined,
-        creadoEn: ahora,
+        creadoEn: existenteLomas ? existenteLomas.creadoEn : ahora,
         actualizadoEn: ahora,
       };
       await routerLomas.save(clon);
 
-      const movEspejo: Movimiento = {
-        id: crypto.randomUUID(),
-        tipo: 'entrada_lomas',
-        routerSerial: clon.serial,
-        routerTipo: clon.tipo,
-        agencia: 'paraiso',
-        usuario: params.usuario,
-        fecha: ahora,
-      };
-      await movLomas.save(movEspejo);
+      if (!existenteLomas) {
+        const movEspejo: Movimiento = {
+          id: crypto.randomUUID(),
+          tipo: 'entrada_lomas',
+          routerSerial: clon.serial,
+          routerTipo: clon.tipo,
+          agencia: 'paraiso',
+          usuario: params.usuario,
+          fecha: ahora,
+        };
+        await movLomas.save(movEspejo);
+      }
 
       exitosos++;
     }
-
     return { exitosos, fallidos: params.seriales.length - exitosos };
   }
 
@@ -331,7 +334,6 @@ export class RouterService {
     const router = await this.routers.getBySerial(params.serial);
     if (!router) throw new Error(`Serial ${params.serial} no existe`);
 
-    // Original: sigue en Paraíso, solo sale de oficina
     router.ubicacion = null;
     router.tecnicoActual = params.tecnico;
     router.actualizadoEn = Date.now();
@@ -342,32 +344,38 @@ export class RouterService {
       tecnico: params.tecnico,
     });
 
-    // Clon en Lomas
     const routerLomasRepo = this.getRouterRepo('lomas');
     const movLomasRepo = this.getMovRepo('lomas');
+
+    // 👇 Revisar si ya existe el clon en Lomas
+    const existenteLomas = await routerLomasRepo.getBySerial(params.serial);
+
     const ahora = Date.now();
     const clon: Router = {
       ...router,
-      id: crypto.randomUUID(),
+      id: existenteLomas ? existenteLomas.id : crypto.randomUUID(),
       agencia: 'lomas',
       ubicacion: params.tecnico ? 'campo' : 'oficina',
       tecnicoActual: params.tecnico,
-      creadoEn: ahora,
+      creadoEn: existenteLomas ? existenteLomas.creadoEn : ahora,
       actualizadoEn: ahora,
     };
     await routerLomasRepo.save(clon);
 
-    const movEspejo: Movimiento = {
-      id: crypto.randomUUID(),
-      tipo: 'entrada_lomas',
-      routerSerial: clon.serial,
-      routerTipo: clon.tipo,
-      agencia: 'paraiso',
-      tecnico: params.tecnico,
-      usuario: params.usuario,
-      fecha: ahora,
-    };
-    await movLomasRepo.save(movEspejo);
+    // Solo registrar el movimiento de entrada si es un clon nuevo
+    if (!existenteLomas) {
+      const movEspejo: Movimiento = {
+        id: crypto.randomUUID(),
+        tipo: 'entrada_lomas',
+        routerSerial: clon.serial,
+        routerTipo: clon.tipo,
+        agencia: 'paraiso',
+        tecnico: params.tecnico,
+        usuario: params.usuario,
+        fecha: ahora,
+      };
+      await movLomasRepo.save(movEspejo);
+    }
   }
 
   async devolverAParaiso(params: {
