@@ -45,6 +45,7 @@ function hojaGeneral(routers: Router[]): any[] {
     ESTADO: r.estado,
     AGENCIA: AGENCIA_LABEL[r.agencia],
     UBICACION: r.ubicacion ? UBIC_LABEL[r.ubicacion] : '',
+    MOTIVO_USO: r.motivoUso ?? '',
     TECNOLOGIA: r.tecnologia ?? '',
     MES_INGRESO: fmtMes(r.fechaIngreso),
     CLIENTE_ACTUAL: r.clienteActual ?? '',
@@ -63,6 +64,7 @@ function hojaNuevos(routers: Router[], movs: Movimiento[]): any[] {
         ESTADO: r.estado,
         AGENCIA: AGENCIA_LABEL[r.agencia],
         UBICACION: r.ubicacion ? UBIC_LABEL[r.ubicacion] : '',
+        MOTIVO_USO: r.motivoUso ?? '',
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_INGRESO: fmt(r.fechaIngreso),
         CLIENTE_ACTUAL: r.clienteActual ?? '',
@@ -89,6 +91,7 @@ function hojaOptimos(routers: Router[], movs: Movimiento[]): any[] {
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_INGRESO: fmt(ultimo?.fecha),
         CLIENTE_ACTUAL: r.clienteActual ?? '',
+        MOTIVO_USO: r.motivoUso ?? '',
         AGENTE_REGISTRO: ultimo?.usuario ?? '',
         TECNICO: tecnico,
       };

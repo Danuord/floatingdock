@@ -161,6 +161,7 @@ export class RouterService {
 
     router.ubicacion = 'campo';
     router.tecnicoActual = params.tecnico;
+    router.motivoUso = params.motivo;
     router.actualizadoEn = Date.now();
     await this.routers.save(router);
     await this.registrar('salida', router, params.usuario, {
@@ -181,6 +182,7 @@ export class RouterService {
     if (!router) throw new Error(`Serial ${params.serial} no existe`);
 
     router.clienteActual = params.cliente;
+    router.motivoUso = params.motivo;
     router.actualizadoEn = Date.now();
     await this.routers.save(router);
     await this.registrar('asignacion_cliente', router, params.usuario, {

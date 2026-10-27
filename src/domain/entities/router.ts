@@ -74,6 +74,9 @@ export interface Router {
   /** Técnico que lo tiene o lo instaló (si aplica) */
   tecnicoActual?: string;
 
+  /** Motivo de uso */
+  motivoUso?: string;
+
   // ─── Metadata ───────────────────────────────────────
   /** Timestamp de creación del registro */
   creadoEn: number;

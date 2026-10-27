@@ -886,6 +886,7 @@ function getColumnas(): ColDef[] {
         { label: 'Ubicación', value: r => getUbicacionLabel(r.ubicacion), prioridad: 2 },
         { label: 'Lote', value: r => String(r.lote ?? '—'), prioridad: 3 },
         { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
+        { label: 'Motivo', value: r => r.motivoUso ?? '—', prioridad: 3 },
         { label: 'Tecnología', value: r => r.tecnologia ?? '—', prioridad: 3 },
         { label: 'Técnico', value: r => r.tecnicoActual ?? '—', prioridad: 3 },
       ];
@@ -896,6 +897,7 @@ function getColumnas(): ColDef[] {
         { label: 'Fecha ingreso', value: r => formatDate(r.fechaIngreso), prioridad: 2 },
         { label: 'Ubicación', value: r => getUbicacionLabel(r.ubicacion), prioridad: 2 },
         { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
+        { label: 'Motivo', value: r => r.motivoUso ?? '—', prioridad: 3 },
         { label: 'Tecnología', value: r => r.tecnologia ?? '—', prioridad: 3 },
         { label: 'Técnico', value: r => r.tecnicoActual ?? '—', prioridad: 3 },
       ];

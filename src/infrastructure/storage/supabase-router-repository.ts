@@ -17,6 +17,7 @@ function toRow(r: Router) {
     fecha_ingreso: r.fechaIngreso,
     cliente_actual: r.clienteActual ?? null,
     tecnico_actual: r.tecnicoActual ?? null,
+    motivo_uso: r.motivoUso ?? null,
     creado_en: r.creadoEn,
     actualizado_en: r.actualizadoEn,
   };
@@ -36,6 +37,7 @@ function fromRow(row: any): Router {
     fechaIngreso: Number(row.fecha_ingreso),
     clienteActual: row.cliente_actual ?? undefined,
     tecnicoActual: row.tecnico_actual ?? undefined,
+    motivoUso: row.motivo_uso ?? undefined,
     creadoEn: Number(row.creado_en),
     actualizadoEn: Number(row.actualizado_en),
   };
