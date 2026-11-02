@@ -83,4 +83,6 @@ export interface Router {
 
   /** Timestamp de la última modificación */
   actualizadoEn: number;
+
+  fechaSalida?: number;
 }

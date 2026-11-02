@@ -1344,7 +1344,9 @@ async function registrarSalida() {
         tecnico,
       });
     } else {
-      await service.registrarSalida({ serial: selectedSerial, tecnico, motivo, usuario: usuarioActual });
+      const fechaInput = elSalidaFecha.value; // "YYYY-MM-DD"
+      const fechaMs = fechaInput ? new Date(fechaInput + 'T12:00:00').getTime() : Date.now();
+      await service.registrarSalida({ serial: selectedSerial, tecnico, motivo, usuario: usuarioActual, fecha: fechaMs });
     }
     selectedSerial = null;
     await refresh();

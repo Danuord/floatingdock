@@ -19,10 +19,9 @@ const UBIC_LABEL: Record<string, string> = {
   campo: 'Campo',
 };
 
-function fmt(ts?: number): string {
+function fmt(ts?: number): Date | string {
   if (!ts) return '';
-  const d = new Date(ts);
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  return new Date(ts);
 }
 
 function fmtMes(ts?: number): string {
@@ -67,6 +66,7 @@ function hojaNuevos(routers: Router[], movs: Movimiento[]): any[] {
         MOTIVO_USO: r.motivoUso ?? '',
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_INGRESO: fmt(r.fechaIngreso),
+        FECHA_SALIDA: r.fechaSalida ? fmt(r.fechaSalida) : '',
         CLIENTE_ACTUAL: r.clienteActual ?? '',
         AGENTE: reg?.usuario ?? '',
       };
@@ -90,6 +90,7 @@ function hojaOptimos(routers: Router[], movs: Movimiento[]): any[] {
         UBICACION: r.ubicacion ? UBIC_LABEL[r.ubicacion] : '',
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_INGRESO: fmt(ultimo?.fecha),
+        FECHA_SALIDA: r.fechaSalida ? fmt(r.fechaSalida) : '',
         CLIENTE_ACTUAL: r.clienteActual ?? '',
         MOTIVO_USO: r.motivoUso ?? '',
         AGENTE_REGISTRO: ultimo?.usuario ?? '',
@@ -127,6 +128,7 @@ function hojaRetorno(movs: Movimiento[]): any[] {
       ULTIMA_AGENCIA: m.agenciaOrigen ? AGENCIA_LABEL[m.agenciaOrigen] : '',
       FECHA_RETORNO: fmt(m.fecha),
       ULTIMO_CLIENTE: m.cliente ?? '',
+      MOTIVO: m.motivo ?? '',
       AGENTE: m.usuario,
       TECNICO: m.tecnico ?? '',
     }));
@@ -170,6 +172,19 @@ function hojaARevisar(routers: Router[], movs: Movimiento[]): any[] {
     });
 }
 
+function aplicarFormatoFecha(ws: XLSX.WorkSheet) {
+  const rangoCeldas = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+  for (let R = rangoCeldas.s.r; R <= rangoCeldas.e.r; ++R) {
+    for (let C = rangoCeldas.s.c; C <= rangoCeldas.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[cellAddress];
+      if (cell && cell.t === 'd') {
+        cell.z = 'dd/mm/yyyy'; // Fuerza el formato visual
+      }
+    }
+  }
+}
+
 export function generarExcel(
   tipos: ExportTipo[],
   routers: Router[],
@@ -203,7 +218,9 @@ export function generarExcel(
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_INGRESO: fmt(r.fechaIngreso),
         AGENCIA: AGENCIA_LABEL[r.agencia],
-      })));
+      })), { cellDates: true });
+      
+      aplicarFormatoFecha(wsNuevos);
       const rangoN = XLSX.utils.decode_range(wsNuevos['!ref'] ?? 'A1');
       wsNuevos['!autofilter'] = { ref: XLSX.utils.encode_range(rangoN) };
       XLSX.utils.book_append_sheet(wb, wsNuevos, 'Nuevos en oficina');
@@ -219,7 +236,9 @@ export function generarExcel(
         TECNOLOGIA: r.tecnologia ?? '',
         FECHA_REGISTRO: fmt(r.actualizadoEn),
         AGENCIA: AGENCIA_LABEL[r.agencia],
-      })));
+      })), { cellDates: true });
+
+      aplicarFormatoFecha(wsOptimos);
       const rangoO = XLSX.utils.decode_range(wsOptimos['!ref'] ?? 'A1');
       wsOptimos['!autofilter'] = { ref: XLSX.utils.encode_range(rangoO) };
       XLSX.utils.book_append_sheet(wb, wsOptimos, 'Óptimos en oficina');
@@ -227,7 +246,9 @@ export function generarExcel(
     }
 
     const { nombre, data } = construcciones[t]();
-    const ws = XLSX.utils.json_to_sheet(data);
+    const ws = XLSX.utils.json_to_sheet(data, { cellDates: true });
+    
+    aplicarFormatoFecha(ws);
     const rango = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
     ws['!autofilter'] = { ref: XLSX.utils.encode_range(rango) };
     XLSX.utils.book_append_sheet(wb, ws, nombre);

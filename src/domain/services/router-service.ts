@@ -155,6 +155,7 @@ export class RouterService {
     tecnico: string;
     motivo: string;
     usuario: string;
+    fecha: number;
   }): Promise<Router> {
     const router = await this.routers.getBySerial(params.serial);
     if (!router) throw new Error(`Serial ${params.serial} no existe`);
@@ -162,11 +163,13 @@ export class RouterService {
     router.ubicacion = 'campo';
     router.tecnicoActual = params.tecnico;
     router.motivoUso = params.motivo;
+    router.fechaSalida = params.fecha;
     router.actualizadoEn = Date.now();
     await this.routers.save(router);
     await this.registrar('salida', router, params.usuario, {
       tecnico: params.tecnico,
       motivo: params.motivo,
+      fecha: params.fecha,
     });
     return router;
   }
