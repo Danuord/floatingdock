@@ -906,7 +906,7 @@ function getColumnas(): ColDef[] {
         { label: 'Serial', value: r => r.serial, prioridad: 1 },
         { label: 'Tipo', value: r => getTipoLabel(r.tipo), prioridad: 1 },
         { label: 'Fecha ingreso', value: r => formatDate(r.fechaIngreso), prioridad: 2 },
-        { label: 'Motivo', value: r => motivosRetorno.get(r.serial) ?? '—', prioridad: 2 },
+        { label: 'Motivo', value: r => r.motivoUso ?? '—', prioridad: 2 },
         { label: 'Cliente', value: r => r.clienteActual ?? '—', prioridad: 3 },
       ];
     default:
@@ -1078,7 +1078,7 @@ async function renderDetalle() {
     <div><strong>Ubicación:</strong> ${getUbicacionLabel(router.ubicacion)}</div>
     <div><strong>Agencia:</strong> ${router.agencia === 'paraiso' ? 'Paraíso' : 'Lomas'}</div>
     <div><strong>Tecnología:</strong> ${router.tecnologia ?? '—'}</div>
-    ${currentFilter === 'en_revision' ? `<div style="grid-column: 1 / -1;"><strong>Motivo:</strong> ${motivosRetorno.get(router.serial) ?? '—'}</div>` : ''}
+    ${currentFilter === 'en_revision' ? `<div style="grid-column: 1 / -1;"><strong>Motivo:</strong> ${router.motivoUso ?? '—'}</div>` : ''}
   `;
 
   elBtnAsignarCliente.hidden = router.estado === 'en_revision';

@@ -75,6 +75,7 @@ export class RouterService {
     destino: 'optimo' | 'a_revisar' | 'segunda';
     usuario: string;
     agencia: Agencia;
+    
   }): Promise<Router> {
     const ahora = Date.now();
     let router = await this.routers.getBySerial(params.serial);
@@ -101,6 +102,7 @@ export class RouterService {
       router.clienteActual = params.cliente ?? undefined;
       router.tecnicoActual = params.tecnico ?? undefined;
       router.agencia = params.agencia;
+      router.motivoUso = params.motivo;
       if (params.fabricante) router.fabricante = params.fabricante;
       router.actualizadoEn = ahora;
     } else {
@@ -114,6 +116,7 @@ export class RouterService {
         fabricante: params.fabricante,
         clienteActual: params.cliente ?? undefined,
         tecnicoActual: params.tecnico ?? undefined,
+        motivoUso: params.motivo,
         fechaIngreso: ahora,
         creadoEn: ahora,
         actualizadoEn: ahora,

@@ -49,14 +49,35 @@ export class SupabaseRouterRepository implements RouterRepository {
   constructor(private agencia: Agencia = 'paraiso') {}
 
   async getAll(): Promise<Router[]> {
-    const { data, error } = await supabase
-      .from('routers')
-      .select('*')
-      .eq('agencia', this.agencia);
-    if (error) throw error;
-    return (data ?? []).map(fromRow);
-  }
+    let allData: any[] = [];
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
 
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('routers')
+        .select('*')
+        .eq('agencia', this.agencia)
+        .order('fecha_ingreso', { ascending: false })
+        .range(from, from + step - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allData.push(...data);
+        from += step;
+        if (data.length < step) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allData.map(fromRow);
+  }
+  
   async getBySerial(serial: string): Promise<Router | null> {
     const { data, error } = await supabase
       .from('routers')
