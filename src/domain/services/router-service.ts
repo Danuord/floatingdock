@@ -273,6 +273,21 @@ export class RouterService {
     return router;
   }
 
+  async registrarSalidaExterna(params: {
+    serial: string;
+    usuario: string;
+  }): Promise<Router> {
+    const router = await this.routers.getBySerial(params.serial);
+    if (!router) throw new Error(`Serial ${params.serial} no existe`);
+
+    router.estado = 'salida_externa';
+    router.actualizadoEn = Date.now();
+    await this.routers.save(router);
+
+    await this.registrar('salida_externa', router, params.usuario);
+    return router;
+  }
+
   async transferirALomasMasivo(params: {
     seriales: string[];
     usuario: string;

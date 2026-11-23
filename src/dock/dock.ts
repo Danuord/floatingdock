@@ -20,6 +20,7 @@ import { supabase } from '../infrastructure/storage/supabase-client';
 import { suscribirCambios } from '../infrastructure/storage/supabase-realtime';
 
 // ── Instancias ─────────────────────────────────────────
+const elBtnSalidaExterna = document.querySelector<HTMLButtonElement>('#btn-salida-externa')!;
 const elBtnDevolverParaiso = document.querySelector<HTMLButtonElement>('#btn-devolver-paraiso')!;
 let modoDevolucion = false;
 const elAccInfo = document.querySelector<HTMLDivElement>('#acc-info')!;
@@ -128,6 +129,7 @@ function getEstadoLabel(e: EstadoRouter): string {
     optimo: 'Óptimo',
     en_revision: 'En revisión',
     dañado: 'Dañado',
+    salida_externa: 'Salida Externa', // 👈 Agrega esta línea
   }[e];
 }
 
@@ -218,6 +220,18 @@ async function init() {
     });
   }
   setAgenciaUI();
+
+  elBtnSalidaExterna.addEventListener('click', async () => {
+    if (!selectedSerial) return;
+    if (!confirm('¿Marcar este router como salida externa? Dejará de estar en el inventario.')) return;
+    try {
+      await service.registrarSalidaExterna({ serial: selectedSerial, usuario: usuarioActual });
+      selectedSerial = null;
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al registrar salida externa');
+    }
+  });
 
   elAgenciaBtns.forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -792,6 +806,7 @@ function actualizarBotonAgregar() {
     optimo: 'Agregar optimo',
     en_revision: 'Agregar retorno',
     dañado: 'Agregar',
+    salida_externa: 'Agregar', // 👈 Agrega esta línea para quitar el error
   };
   elBtnAgregar.textContent = textos[currentFilter];
 }

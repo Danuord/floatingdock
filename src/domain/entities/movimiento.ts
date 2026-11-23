@@ -13,6 +13,7 @@ export type TipoMovimiento =
   | 'transferencia_lomas'
   | 'entrada_lomas'
   | 'importacion_optimo'
+  | 'salida_externa'
   | 'devolucion_paraiso';
 
 export interface Movimiento {

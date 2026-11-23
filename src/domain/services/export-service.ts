@@ -41,7 +41,7 @@ function hojaGeneral(routers: Router[]): any[] {
     SERIAL: r.serial,
     LOTE: r.lote ?? '',
     TIPO: TIPO_LABEL[r.tipo],
-    ESTADO: r.estado,
+    ESTADO: r.estado === 'salida_externa' ? 'Salida Externa' : r.estado,
     AGENCIA: AGENCIA_LABEL[r.agencia],
     UBICACION: r.ubicacion ? UBIC_LABEL[r.ubicacion] : '',
     MOTIVO_USO: r.motivoUso ?? '',

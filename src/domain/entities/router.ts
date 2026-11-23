@@ -13,7 +13,7 @@ export type TipoRouter = 'duo' | 'internet' | 'cable';
  * - en_revision:  volvió del campo, pendiente de revisar
  * - dañado:       merma, no sirve
  */
-export type EstadoRouter = 'nuevo' | 'optimo' | 'en_revision' | 'dañado';
+export type EstadoRouter = 'nuevo' | 'optimo' | 'en_revision' | 'dañado' | 'salida_externa';
 
 /**
  * Dónde está físicamente el router ahora mismo.
@@ -85,4 +85,6 @@ export interface Router {
   actualizadoEn: number;
 
   fechaSalida?: number;
+
+  
 }
